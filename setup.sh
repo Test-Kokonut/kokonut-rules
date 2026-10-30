@@ -5,7 +5,8 @@
 #   /root/.claude/CLAUDE.md       kokonut-rules' CLAUDE.md, the rulebook the chat loads (the repos' copies excluded)
 #   /root/.claude/hooks/*.js      the hooks kokonut-rules' .claude/settings.json wires, and the hooks they require
 #   /root/.claude/settings.json   kokonut-rules' .claude/settings.json, its hook commands made absolute
-#   /root/.claude/commands/*.md   the slash commands of kokonut-rules' .claude/commands (COMMANDS below): /continue
+#   /root/.claude/commands/*.md   the slash commands of kokonut-rules' .claude/commands (COMMANDS below): /continue,
+#                                 /handover
 #   /root/.claude/kokonut/        this script, once.sh and make-settings.js, and what the last run saw
 # Never /home/user/.claude: Claude Code reads that folder too, as /home/user's project settings, and the hooks would
 # fire twice.
@@ -32,7 +33,7 @@ mode=${1:-setup}
 REAL=/root/.claude
 REPO=Test-Kokonut/kokonut-rules
 # The slash commands installed in <dest>/commands, from kokonut-rules' .claude/commands/. A new command is added here.
-COMMANDS='continue.md'
+COMMANDS='continue.md handover.md'
 NODE=$(command -v node 2>/dev/null) || NODE=/opt/node22/bin/node
 WHY=
 

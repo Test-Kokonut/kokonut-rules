@@ -86,9 +86,10 @@ const INJECTED = new RegExp('^(?:<(?:command-|local-command|system-reminder|task
 
 // Whether an entry's origin is George: Claude Code marks each message with where it came from, origin.kind "human"
 // for one he typed ("task-notification", "peer" for a helper's hand-back or another session's message, ...). An
-// entry without an origin (older transcripts) is judged by its text alone.
+// entry without an origin never counts: every message George typed carries origin.kind "human" (all 242 of a live
+// chat's, 30 Oct 2026), and a chat started by another chat must never count its first message as his.
 function fromGeorge(origin) {
-  return origin === undefined || Boolean(origin && typeof origin === 'object' && origin.kind === 'human');
+  return Boolean(origin && typeof origin === 'object' && origin.kind === 'human');
 }
 
 // A message George typed in this chat: a user entry from him (fromGeorge; not promptSource "system", not a
