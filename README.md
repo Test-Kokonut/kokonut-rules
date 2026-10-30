@@ -9,8 +9,10 @@ downloads it with no login.
   points at it, never restates it.
 - `.claude/settings.json`: the permissions (what a chat does without asking, what always asks first, what is never
   allowed), the hook wiring, in the project form `node "$CLAUDE_PROJECT_DIR/.claude/hooks/<name>.js"`, and every new
-  chat's defaults: model Opus (`model`) and effort extra high (`effortLevel` `xhigh`); George changes either per chat
-  (/model, /effort). The installer turns it into the machine-wide /root/.claude/settings.json.
+  chat's model: Opus (`model`). No effort: a chat started by create_session ignored `effortLevel` `xhigh` there and
+  ran at medium (30 Oct 2026). The effort of a chat George starts is his app's choice; a hand-over copies the old
+  chat's effort (the new chat's first prompt is `/effort <level>`). George changes either per chat (/model, /effort).
+  The installer turns it into the machine-wide /root/.claude/settings.json.
 - `.claude/hooks/`: the hooks. `session-start.js` (the reader identity, then the start note: where things are and the
   open projects, one line each), `reminder.js` (the reply rules before every message), `status-check.js` (at the end
   of a turn: a chat that changed things since its last status page save is refused once, with a note to save it
@@ -74,16 +76,17 @@ bash /tmp/kokonut-setup.sh
   - 700,000 tokens, once: `HANDOVER DUE`, with the model and effort. The chat finishes its step and runs `/handover`.
   - After that, each of George's messages: one line, `Context <n> of about 784,000: hand-over due`.
   - 744,000 tokens (40,000 before compaction may come), once: `HANDOVER LATE`.
-  - A first message that starts `KOKONUT HANDOVER <name>`: `HANDOVER QUIZ`: that message comes from the old chat, not
+  - A message that starts `KOKONUT HANDOVER <name>`: `HANDOVER QUIZ`: that message comes from the old chat, not
     George.
   - After a compaction (context under 600,000) it starts over. Inside a helper it prints nothing.
 - What `/handover` does, about 2 to 3 minutes, asking George nothing until the end: the page's last State line, the
-  `notes` Doc in the project's Drive folder brought up to date, a new chat (same environment, model and repo) whose
-  first message is the 5-question quiz, the answer key and verdict in the Doc `handover-quiz` in that folder, one more
-  round for missed points only, then one question: "New chat ready: <link>. Continue there?". George types
-  `continue <name>` in the new chat to move. Until then the new chat only reads and answers.
+  `notes` Doc in the project's Drive folder brought up to date, a new chat (same environment, model, effort and repo:
+  its first prompt `/effort <the old chat's effort>`) sent the 5-question quiz, the answer key and verdict in the Doc
+  `handover-quiz` in that folder, one more round for missed points only, a check that the new chat's model and effort
+  match, then one question: "New chat ready: <link>. Continue there?". George types `continue <name>` in the new
+  chat to move. Until then the new chat only reads and answers.
 - George's messages: only one with `origin.kind` "human" counts as his (reminder.js `fromGeorge`). A message with no
-  origin never does, so a chat started by another chat cannot take its first message for George's "rule change ok".
+  origin never does, so a chat started by another chat cannot take that chat's messages for George's "rule change ok".
 - Test without a 700,000-token chat: `KOKONUT_HANDOVER_AT="<due> <late>"` in the hook's environment, or the same text
   in /root/.claude/kokonut/handover-at (a rule file: it needs George's "rule change ok"). By hand, on a chat's own
   transcript: `echo '{"hook_event_name":"UserPromptSubmit","session_id":"t","transcript_path":"<file>"}' |
