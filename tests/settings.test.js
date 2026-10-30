@@ -16,10 +16,10 @@ const GOOGLE_WRITES = ['Bash(gcloud run deploy:*)', 'Bash(gcloud run services up
   'Bash(gcloud scheduler jobs delete:*)', 'Bash(gcloud scheduler jobs pause:*)',
   'Bash(bq rm:*)', 'Bash(bq load:*)', 'Bash(bq mk:*)', 'Bash(bq update:*)'];
 
-test('allow: the routine commands, the web (WebFetch, WebSearch, curl), every Drive, Gmail, Slack and Calendar tool in both spellings, Agent and Task', () => {
+test('allow: the routine commands, the web (WebFetch, WebSearch, curl), every Drive, Gmail, Slack and Calendar tool in both spellings and Agent', () => {
   const want = ['Bash(git status:*)', 'Bash(git log:*)', 'Bash(git diff:*)', 'Bash(git fetch:*)', 'Bash(git switch:*)',
     'Bash(git add:*)', 'Bash(git commit:*)', 'Bash(git push -u origin:*)', 'Bash(node:*)', 'Bash(cp:*)',
-    'Bash(gcloud:*)', 'Bash(bq:*)', 'WebFetch', 'WebSearch', 'Bash(curl:*)', 'Agent', 'Task'];
+    'Bash(gcloud:*)', 'Bash(bq:*)', 'WebFetch', 'WebSearch', 'Bash(curl:*)', 'Agent'];
   for (const server of ['Google_Drive', 'Gmail', 'Slack', 'Google_Calendar']) want.push(`mcp__${server}__*`, `mcp__claude_ai_${server}__*`);
   for (const w of want) assert.ok(allow.includes(w), w);
 });
@@ -85,7 +85,7 @@ test('hooks: session start; reminder and the hand-over check; no-main, guard, th
 // it, register the clone) and the clone the attach hands back. Without these rules the attach goes to the auto mode
 // classifier, which refuses it as a permission grant ("[Permission Grant]"), and the chat cannot start in its
 // system's repo.
-const ATTACH = ['mcp__claude-code-remote__list_repos', 'mcp__claude-code-remote__check_repo_access',
+const ATTACH = ['mcp__claude-code-remote__list_repos',
   'mcp__claude-code-remote__add_repo', 'mcp__claude-code-remote__register_repo_root',
   'Bash(git clone https://github.com/Test-Kokonut/*)'];
 
