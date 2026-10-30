@@ -33,7 +33,7 @@ const READER_SECTION = ['## Reading from a chat', '', 'Sign in as the reader.', 
 // A transcript: George's message, then one assistant turn using the tools given.
 function transcript(tools, extra) {
   const entries = [
-    { type: 'user', uuid: 'u1', message: { role: 'user', content: 'fix the billing page' } },
+    { type: 'user', uuid: 'u1', origin: { kind: 'human' }, message: { role: 'user', content: 'fix the billing page' } },
     { type: 'assistant', uuid: 'a1', message: { role: 'assistant', content: tools.map((t, i) => ({ type: 'tool_use', id: 't' + i, name: t.name, input: t.input || {} })) } },
   ].concat(extra || []);
   const file = path.join(scratch(), 'transcript.jsonl');
@@ -155,7 +155,7 @@ test('as a hook, the status tool with no copy and no gh: the pointer; the state 
 
 test('the transcript already holds the message being submitted: the turn before it counts', () => {
   const ws = workspace();
-  const file = transcript([{ name: 'Edit' }], [{ type: 'user', uuid: 'u2', message: { role: 'user', content: 'next' } }]);
+  const file = transcript([{ name: 'Edit' }], [{ type: 'user', uuid: 'u2', origin: { kind: 'human' }, message: { role: 'user', content: 'next' } }]);
   const out = R.onPrompt({ prompt: 'next', session_id: 's', transcript_path: file }, { projectDir: ws.dir, home: ws.home, stateDir: scratch(), gh: NO_GH });
   assert.strictEqual(out, ALWAYS);
 });

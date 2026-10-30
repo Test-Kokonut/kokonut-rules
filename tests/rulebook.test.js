@@ -10,7 +10,7 @@ const lines = fs.readFileSync(path.join(ROOT, 'CLAUDE.md'), 'utf8').replace(/\r/
 
 test('the parts, in order', () => {
   assert.deepStrictEqual(lines.filter((l) => l.startsWith('# ')), ['# Purpose and Done when', "# George's messages", '# Changes', '# Facts',
-    '# Replies', '# Who does the work', '# Project name and Drive folder', '# Live data', '# Upwork (strict)', '# How George works']);
+    '# Replies', '# Who does the work', '# Project name and Drive folder', '# Live data', '# Upwork (strict)', '# Hand-over', '# How George works']);
 });
 
 test('the reply rules are numbered 11 to 15, one per line', () => {

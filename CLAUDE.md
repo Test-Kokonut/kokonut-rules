@@ -70,6 +70,12 @@
     upwork-sync service logs in.
 21. The Upwork connector: each use only after George's yes to what, why and how.
 
+# Hand-over
+22. Hand-over. At "hand-over due", finish the current step and start nothing new. Then, without asking: write the
+    notes, start the new chat, and quiz it. Then ask George: "New chat ready: <link>. Continue there?" A chat started
+    by a hand-over only reads its project's page and notes and answers the old chat's questions. It changes nothing
+    until George types in it.
+
 # How George works
 - Never fill the length limit. Make fewer points, in plain words.
 - In a proposal, mark where each part comes from: a checked fact, a rule, George's instruction for this task, or your

@@ -8,17 +8,19 @@ downloads it with no login.
 - `CLAUDE.md`: the rulebook every chat loads; the only source of rule text: a hook, check or page that needs a rule
   points at it, never restates it.
 - `.claude/settings.json`: the permissions (what a chat does without asking, what always asks first, what is never
-  allowed) and the hook wiring, in the project form `node "$CLAUDE_PROJECT_DIR/.claude/hooks/<name>.js"`. The
-  installer turns it into the machine-wide /root/.claude/settings.json.
+  allowed), the hook wiring, in the project form `node "$CLAUDE_PROJECT_DIR/.claude/hooks/<name>.js"`, and every new
+  chat's defaults: model Opus (`model`) and effort extra high (`effortLevel` `xhigh`); George changes either per chat
+  (/model, /effort). The installer turns it into the machine-wide /root/.claude/settings.json.
 - `.claude/hooks/`: the hooks. `session-start.js` (the reader identity, then the start note: where things are and the
   open projects, one line each), `reminder.js` (the reply rules before every message), `status-check.js` (at the end
   of a turn: a chat that changed things since its last status page save is refused once, with a note to save it
-  again), `no-main.js` (no push to main), `guard.js` (no Upwork API or login, no key in a commit) and `rule-guard.js`
-  (rule files change only after George types "rule change ok"). What each does is written at the top of its file.
+  again), `handover-check.js` (the hand-over, below), `no-main.js` (no push to main), `guard.js` (no Upwork API or
+  login, no key in a commit) and `rule-guard.js` (rule files change only after George types "rule change ok"). What
+  each does is written at the top of its file.
 - `.claude/commands/`: the slash commands. `continue.md`: `/continue <name>` takes a project over, or starts it: its
   status page's brief (Folder, Chat, Purpose, Done when, State, Next step), its working notes in its Drive folder,
   and the page's Chat line set to this chat; a new project settles Purpose and Done when with George first, then gets
-  its Drive folder and its page.
+  its Drive folder and its page. `handover.md`: `/handover` hands the project over to a new chat (below).
 - `setup.sh`: the installer, below. A rule file, as CLAUDE.md and .claude/ are: the rule guard refuses a change to it
   without George's "rule change ok".
 - `tests/`, `scripts/changed-tests.js`, `package.json`: the hooks' and settings' tests (`npm test` runs them all) and
@@ -46,8 +48,8 @@ bash /tmp/kokonut-setup.sh
 - What it does: signs in the reader identity, then downloads `setup.sh` from main and runs it. `setup.sh` downloads
   main's `CLAUDE.md`, `.claude/settings.json`, hooks and commands from raw.githubusercontent.com and installs them
   machine-wide in /root/.claude: CLAUDE.md, hooks/, commands/ (the commands setup.sh lists in COMMANDS, so every
-  chat has `/continue`), settings.json (its hook commands made absolute, the repos' own CLAUDE.md copies excluded,
-  the installed files closed to Claude's edit tools) and kokonut/ (the installer and what it saw:
+  chat has `/continue` and `/handover`), settings.json (its hook commands made absolute, the repos' own CLAUDE.md
+  copies excluded, the installed files closed to Claude's edit tools) and kokonut/ (the installer and what it saw:
   kokonut/setup.txt). Never /home/user/.claude: Claude Code reads it as /home/user's project settings, and the hooks
   would fire twice.
 - At every chat start the SessionStart hook runs the installed `setup.sh` again: it downloads main once more and
@@ -64,6 +66,29 @@ bash /tmp/kokonut-setup.sh
 - Paste the box again only when the box above changes. A change to `setup.sh` itself reaches chats on its own: each run
   hands over to the `setup.sh` it downloaded.
 
+## The hand-over (rule 22)
+- Why: a chat compacts (summarises its own past) at about 784,000 tokens of context and loses detail. Before that, it
+  hands its project to a new chat that starts from the page and the notes.
+- What fires when (`handover-check.js`, on George's messages and after every tool call; it reads only the end of the
+  transcript):
+  - 700,000 tokens, once: `HANDOVER DUE`, with the model and effort. The chat finishes its step and runs `/handover`.
+  - After that, each of George's messages: one line, `Context <n> of about 784,000: hand-over due`.
+  - 744,000 tokens (40,000 before compaction may come), once: `HANDOVER LATE`.
+  - A first message that starts `KOKONUT HANDOVER <name>`: `HANDOVER QUIZ`: that message comes from the old chat, not
+    George.
+  - After a compaction (context under 600,000) it starts over. Inside a helper it prints nothing.
+- What `/handover` does, about 2 to 3 minutes, asking George nothing until the end: the page's last State line, the
+  `notes` Doc in the project's Drive folder brought up to date, a new chat (same environment, model and repo) whose
+  first message is the 5-question quiz, the answer key and verdict in the Doc `handover-quiz` in that folder, one more
+  round for missed points only, then one question: "New chat ready: <link>. Continue there?". George types
+  `continue <name>` in the new chat to move. Until then the new chat only reads and answers.
+- George's messages: only one with `origin.kind` "human" counts as his (reminder.js `fromGeorge`). A message with no
+  origin never does, so a chat started by another chat cannot take its first message for George's "rule change ok".
+- Test without a 700,000-token chat: `KOKONUT_HANDOVER_AT="<due> <late>"` in the hook's environment, or the same text
+  in /root/.claude/kokonut/handover-at (a rule file: it needs George's "rule change ok"). By hand, on a chat's own
+  transcript: `echo '{"hook_event_name":"UserPromptSubmit","session_id":"t","transcript_path":"<file>"}' |
+  HOME=<scratch> KOKONUT_HANDOVER_AT=1000 node .claude/hooks/handover-check.js` prints the `HANDOVER DUE` line.
+
 ## How a rule changes
 1. Only on George's go, typed in the chat as "rule change ok" (the rule guard asks for it before every edit, commit
    and push of a rule file), and only here, on the chat's own branch.
@@ -79,4 +104,5 @@ bash /tmp/kokonut-setup.sh
 - New chats: paste back the earlier setup script (or empty the box) and Save changes; new chats then start without
   the install.
 - In a running chat, after George's "rule change ok": delete /root/.claude/CLAUDE.md, settings.json, hooks/,
-  commands/continue.md and kokonut/ (put kokonut/settings.json.before-kokonut back first, if there is one).
+  commands/continue.md, commands/handover.md, handover-state/ and kokonut/ (put kokonut/settings.json.before-kokonut
+  back first, if there is one).
