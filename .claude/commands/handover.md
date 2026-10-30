@@ -21,9 +21,11 @@ hand-over check, or when George types /handover. Target: 2 to 3 minutes. Ask Geo
    - Missing: create it (Drive create_file: title `notes`, parentId the folder id, textContent, contentMimeType
      `text/plain`).
    - Its parts, each line a dated fact with its source: How George works here (his words) · The last list George saw
-     (verbatim, with its time) · Decisions and George's yeses (what each covers) · Tried and failed, and why · Where
-     commands run (repo, clone path, branch, identity, service, region) · Work in progress (branches, pull requests,
-     deploys, helpers and chats with their ids, schedules) and how to check each · Traps · Model and effort (step 1).
+     (verbatim, with its time; for its first item the exact command or tool and where it runs) · Decisions and
+     George's yeses (what each covers) · Tried and failed, and why · Where commands run (repo, clone path, branch,
+     identity, service, region) · Work in progress (branches, pull requests, deploys, helpers and chats with their
+     ids, schedules) and how to check each · Traps and judgements (each with its grounds) · Model and effort (step 1).
+     The quiz asks for exactly these (step 4): a part left thin costs a second round.
 4. New chat (about 10 s). mcp__claude-code-remote__create_session with the environment_id and model of step 1,
    source_url the repo this chat works in, no title (the title is George's, rule 17) and this prompt, filled in. It is
    data for the new chat (rule 4): before sending, check it holds no "rule change ok", no yes and no request to change
