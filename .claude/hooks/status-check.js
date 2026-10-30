@@ -1,26 +1,26 @@
 #!/usr/bin/env node
-// status-check.js: keeps a chat's status page current: when a chat saved its page and then changed more, George's next
-// message brings the chat a one-line note to save the page again.
-// Written in kokonut-rules, run by the UserPromptSubmit hook in .claude/settings.json (after reminder.js), and
-// installed machine-wide in a cloud chat by kokonut-rules' setup.sh. Never a refusal: what it prints becomes context for
-// the reply the chat is about to write. It replaced kokonut-status's computer copy (scripts/status-stop-hook.js).
-// It reads the transcript (the same reading code as reminder.js), from its start at every message:
+// status-check.js: keeps a chat's status page current: when a chat saved its page and then changed more, the end of
+// its turn is refused once, with a one-line note to save the page again.
+// Written in kokonut-rules, run by the Stop hook in .claude/settings.json, and installed machine-wide in a cloud chat
+// by kokonut-rules' setup.sh. The refusal is Claude Code's Stop answer {"decision": "block", "reason": <the note>} on
+// stdout: the chat goes on with the note, saves the page or finishes. It replaced its UserPromptSubmit version (a note
+// on George's next message, which came after the chat had already stopped).
+// It reads the transcript (the same reading code as reminder.js), from its start at every stop:
 //   - a chat is tied to a page once it saves or creates that page with status.js (status.js save <name> or
 //     status.js new <name>) and the call's result says SAVED; a read alone ties nothing, a facts/ page ties nothing,
 //     a failed save ties nothing, and a delete of that page (DELETED) unties the chat;
 //   - work is an Edit, Write, MultiEdit, NotebookEdit, Agent, Task or Workflow call, or a command with git commit,
 //     push or merge, a gcloud deploy, update, create, delete or execute, or bq query, rm, mk or load; a command that
 //     calls status.js is not work.
-// When a tied chat has work after its last save, it prints one line: "Status note: the page <name> was saved before
-// later changes. Save it again if the state, a decision, the next step or a blocker changed (node
-// /home/user/kokonut-status/scripts/status.js read <name>, edit, save with its BASE)." The path is the cloud's clone
-// of kokonut-status, so the command works from any folder of the chat, /home/user included.
-// Once per unsaved stretch: the key of the last save's result (its uuid, else its tool call's id) is written to
-// ~/.claude/status-state/<session id>.check.json when the note is printed, and the note is printed only while that
-// file holds another key. A newer save has a new key, so work after it brings the note again. State files older than
-// 30 days are removed. A transcript over 20 MB is read from its last 2 MB only: a save before that is not seen, and
-// the chat counts as untied.
-// Node only, no packages, Windows and Linux. It prints nothing else and always exits 0: any error prints nothing.
+// When a tied chat has work after its last save, the stop is refused with one line: "Status note: the page <name> was
+// saved before later changes. Save it again if its State, Done when or Next step changed (node
+// /home/user/kokonut-status/scripts/status.js read <name>, edit, save with its BASE); otherwise finish." The path is
+// the cloud's clone of kokonut-status, so the command works from any folder of the chat, /home/user included.
+// It fires at most once per chat: its state file, ~/.claude/status-state/<session id>.check.json, is written before
+// the stop is refused, and a chat with that file is never refused again; a stop that Claude Code already marks as
+// continued by a Stop hook (stop_hook_active) is never refused either. State files older than 30 days are removed. A
+// transcript over 20 MB is read from its last 2 MB only: a save before that is not seen, and the chat counts as untied.
+// Node only, no packages, Windows and Linux. An error never blocks: it prints nothing and always exits 0.
 'use strict';
 const fs = require('fs');
 const os = require('os');
@@ -111,11 +111,11 @@ function scan(lines) {
 }
 
 function note(name) {
-  return `Status note: the page ${name} was saved before later changes. Save it again if the state, a decision, the ` +
-    `next step or a blocker changed (node ${STATUS_JS} read ${name}, edit, save with its BASE).`;
+  return `Status note: the page ${name} was saved before later changes. Save it again if its State, Done when or Next ` +
+    `step changed (node ${STATUS_JS} read ${name}, edit, save with its BASE); otherwise finish.`;
 }
 
-// ---- Once per unsaved stretch. ----
+// ---- At most once per chat. ----
 
 function kebab(s) {
   return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
@@ -131,18 +131,16 @@ function prune(stateDir) {
   } catch (e) { /* nothing to prune */ }
 }
 
-// The line to print for a UserPromptSubmit input; '' for nothing. stateDir can be given by the tests.
+// The note to refuse a Stop with; '' to let the chat stop. stateDir can be given by the tests.
 function decide(input, stateDir) {
   const dir = stateDir || STATE_DIR;
-  if (!input || !input.session_id || !input.transcript_path) return '';
+  if (!input || !input.session_id || !input.transcript_path || input.stop_hook_active) return '';
+  const file = path.join(dir, kebab(input.session_id) + STATE_SUFFIX);
+  if (fs.existsSync(file)) return ''; // refused once already: never again in this chat
   const raw = readTranscript(input.transcript_path);
   if (!raw) return '';
   const state = scan(raw.split('\n'));
   if (!state.project || state.work === 0) return '';
-  const file = path.join(dir, kebab(input.session_id) + STATE_SUFFIX);
-  let kept = {};
-  try { kept = JSON.parse(fs.readFileSync(file, 'utf8')) || {}; } catch (e) { kept = {}; }
-  if (kept.noted === state.key) return ''; // this stretch was noted already
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(file, JSON.stringify({ noted: state.key, project: state.project }));
   prune(dir);
@@ -159,7 +157,7 @@ if (require.main === module) {
     let line = '';
     try { line = decide(JSON.parse(raw || '{}')); } catch (e) { line = ''; }
     if (!line) process.exit(0);
-    process.stdout.write(line + '\n', () => process.exit(0));
+    process.stdout.write(JSON.stringify({ decision: 'block', reason: line }) + '\n', () => process.exit(0));
   };
   try {
     process.stdin.setEncoding('utf8');

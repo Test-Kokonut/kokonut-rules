@@ -220,13 +220,18 @@ function gh(args, timeout) {
     windowsHide: true, maxBuffer: 16 * 1024 * 1024 });
 }
 
-// A file of another repo, from a clone: beside the project folder (../<repo>/<file>: a chat with one repo), inside it
-// (<project>/<repo>/<file>: a chat with several, whose project folder is /home/user), or in /home/user/<repo>/<file>;
-// else from GitHub (the contents API, base64 decoded); '' when none can be read.
-function repoFile(dir, repo, file, run) {
+// The folders a clone of another repo is looked for in, in order: beside the project folder (a chat with one repo),
+// inside it (a chat with several, whose project folder is /home/user), and /home/user, where the cloud clones them.
+function cloneBases(dir) {
   const project = path.resolve(dir || '.');
+  return [path.dirname(project), project, path.resolve(process.env.KOKONUT_REPOS_DIR || CLOUD_REPOS)];
+}
+
+// A file of another repo, from a clone (cloneBases: ../<repo>/<file>, <project>/<repo>/<file> or
+// /home/user/<repo>/<file>); else from GitHub (the contents API, base64 decoded); '' when none can be read.
+function repoFile(dir, repo, file, run) {
   const parts = [repo, ...file.split('/')];
-  for (const base of [path.dirname(project), project, path.resolve(process.env.KOKONUT_REPOS_DIR || CLOUD_REPOS)]) {
+  for (const base of cloneBases(dir)) {
     const near = readText(path.join(base, ...parts));
     if (near) return near;
   }
@@ -341,4 +346,4 @@ if (require.main === module) {
 
 module.exports = { PREFIX, STATUS_DOC, READER_DOC, STATE_DIR,
   readTranscript, parse, textOf, isUserText, queuedText, lastTyped, lastTurnTools,
-  projectDir, readText, rulebookText, section, bullets, bullet, gh, repoFile, wanted, onPrompt };
+  projectDir, readText, rulebookText, section, bullets, bullet, gh, cloneBases, repoFile, wanted, onPrompt };

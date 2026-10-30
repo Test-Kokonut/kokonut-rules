@@ -5,9 +5,9 @@
 // Rule files: any CLAUDE.md (CLAUDE.local.md too), anything under a .claude/ or .github/ folder, in any repo or
 // folder; kokonut-rules' installer, setup.sh at the top of a folder named kokonut-rules or of one that holds
 // .claude/hooks/rule-guard.js (another checkout of kokonut-rules); and, in the home folder's .claude/, only
-// CLAUDE.md, settings.json, hooks/ and kokonut/ (the machine-wide install of kokonut-rules' setup.sh: the rulebook,
-// the settings, the hooks and their installer; its transcripts, memory and state are no rule files). Nothing under
-// node_modules/ is one.
+// CLAUDE.md, settings.json, hooks/, commands/ and kokonut/ (the machine-wide install of kokonut-rules' setup.sh: the
+// rulebook, the settings, the hooks, the slash commands and their installer; its transcripts, memory and state are no
+// rule files). Nothing under node_modules/ is one.
 // A tool call that would change one is refused unless George's latest message (lastTyped() of reminder.js: a message
 // he typed in this chat; a task notification, a helper's report or another session's message never counts) holds
 // "rule change ok", in any case. The call is read as:
@@ -71,7 +71,7 @@ function isRulePath(p, home) {
   const h = segments(home || '');
   if (h.length && low.length > h.length && h.every((s, i) => low[i] === s) && low[h.length] === '.claude') {
     const first = low[h.length + 1];
-    return first === 'claude.md' || first === 'settings.json' || first === 'hooks' || first === 'kokonut';
+    return first === 'claude.md' || first === 'settings.json' || first === 'hooks' || first === 'commands' || first === 'kokonut';
   }
   if (/^claude(?:\.local)?\.md$/.test(low[low.length - 1])) return true;
   if (low[low.length - 1] === 'setup.sh' && low.length > 1 && (low[low.length - 2] === 'kokonut-rules' ||
