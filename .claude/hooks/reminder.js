@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // reminder.js: before every message, the reply rules, read from the rulebook itself: this file holds no rule text of
 // its own.
-// The same file in every repo, run by the UserPromptSubmit hook in .claude/settings.json, and installed machine-wide
-// in a cloud chat by scripts/kokonut-setup.sh. At every run it reads the rulebook: ~/.claude/CLAUDE.md (the one the
+// Written in kokonut-rules, run by the UserPromptSubmit hook in .claude/settings.json, and installed machine-wide in a
+// cloud chat by kokonut-rules' setup.sh. At every run it reads the rulebook: ~/.claude/CLAUDE.md (the one the
 // setup script installs, the copy the chat loads), else $CLAUDE_PROJECT_DIR/CLAUDE.md, else the CLAUDE.md of the
 // hook's cwd (none of them: it prints nothing at all), and prints, each part after a blank line:
 //   always: "REPLY RULES, before every reply:", then the section "# Replies" as written there (heading and rules);

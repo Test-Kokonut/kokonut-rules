@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // status-check.js: keeps a chat's status page current: when a chat saved its page and then changed more, George's next
 // message brings the chat a one-line note to save the page again.
-// The same file in every repo, run by the UserPromptSubmit hook in .claude/settings.json (after reminder.js), so it
-// runs wherever the repo's settings load, a cloud chat included. Never a refusal: what it prints becomes context for
+// Written in kokonut-rules, run by the UserPromptSubmit hook in .claude/settings.json (after reminder.js), and
+// installed machine-wide in a cloud chat by kokonut-rules' setup.sh. Never a refusal: what it prints becomes context for
 // the reply the chat is about to write. It replaced kokonut-status's computer copy (scripts/status-stop-hook.js).
 // It reads the transcript (the same reading code as reminder.js), from its start at every message:
 //   - a chat is tied to a page once it saves or creates that page with status.js (status.js save <name> or

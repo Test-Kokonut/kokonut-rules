@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 // rule-guard.js: rule files change only after George types "rule change ok" in this chat.
-// The same file in every repo, run by the PreToolUse hook in .claude/settings.json on Bash|PowerShell (after
-// no-main.js and guard.js) and on Edit|Write|MultiEdit|NotebookEdit.
+// Written in kokonut-rules and installed machine-wide by its setup.sh; run by the PreToolUse hook in
+// .claude/settings.json on Bash|PowerShell (after no-main.js and guard.js) and on Edit|Write|MultiEdit|NotebookEdit.
 // Rule files: any CLAUDE.md (CLAUDE.local.md too), anything under a .claude/ or .github/ folder, in any repo or
-// folder, and, in the home folder's .claude/, only CLAUDE.md, settings.json, hooks/ and kokonut/ (the machine-wide
-// install of scripts/kokonut-setup.sh: the rulebook, the settings, the hooks and their installer; its transcripts,
-// memory and state are no rule files). Nothing under node_modules/ is one.
+// folder; kokonut-rules' installer, setup.sh at the top of a folder named kokonut-rules or of one that holds
+// .claude/hooks/rule-guard.js (another checkout of kokonut-rules); and, in the home folder's .claude/, only
+// CLAUDE.md, settings.json, hooks/ and kokonut/ (the machine-wide install of kokonut-rules' setup.sh: the rulebook,
+// the settings, the hooks and their installer; its transcripts, memory and state are no rule files). Nothing under
+// node_modules/ is one.
 // A tool call that would change one is refused unless George's latest message (lastTyped() of reminder.js: a message
 // he typed in this chat; a task notification, a helper's report or another session's message never counts) holds
 // "rule change ok", in any case. The call is read as:
@@ -49,8 +51,8 @@ const SAY = 'Rule files change only after George types "rule change ok" in this 
 const reasonRule = (what) => `Refused. ${SAY} This would change ${what}. Ask George first.`;
 const reasonUnsure = (why) => `Refused. ${SAY} The guard cannot tell whether this changes one (${why}). Ask George first, or name the files plainly.`;
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
-// A rule file named in text: CLAUDE.md as a file name, .claude or .github as a folder name.
-const RULE_TEXT = /(?:^|[^\w.-])claude(?:\.local)?\.md(?![\w.-])|(?:^|[^\w])\.(?:claude|github)(?![\w.-])/i;
+// A rule file named in text: CLAUDE.md as a file name, .claude or .github as a folder name, kokonut-rules/setup.sh.
+const RULE_TEXT = /(?:^|[^\w.-])claude(?:\.local)?\.md(?![\w.-])|(?:^|[^\w])\.(?:claude|github)(?![\w.-])|kokonut-rules[\\/]+setup\.sh(?![\w.-])/i;
 const RULE_NAME = /^(?:claude(?:\.local)?\.md|settings(?:\.local)?\.json|hooks|commands|workflows)$/i;
 const GIT_WRITE = /\bgit\b[^\n]*\b(?:commit|push)\b/;
 const MAX_DEPTH = 6; // text that runs inside text that runs: read this deep
@@ -72,6 +74,8 @@ function isRulePath(p, home) {
     return first === 'claude.md' || first === 'settings.json' || first === 'hooks' || first === 'kokonut';
   }
   if (/^claude(?:\.local)?\.md$/.test(low[low.length - 1])) return true;
+  if (low[low.length - 1] === 'setup.sh' && low.length > 1 && (low[low.length - 2] === 'kokonut-rules' ||
+    fs.existsSync(path.join(path.dirname(p), '.claude', 'hooks', 'rule-guard.js')))) return true; // kokonut-rules' installer
   return low.includes('.claude') || low.includes('.github');
 }
 

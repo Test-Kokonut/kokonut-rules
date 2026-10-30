@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // no-main.js: refuses every git push that would land on main or master: a chat pushes the branch it works on (the
 // one the cloud gives it, claude/... included) and lands it on main by a pull request.
-// The same file in every repo, run by the PreToolUse hook on Bash|PowerShell in .claude/settings.json.
+// Written in kokonut-rules, installed machine-wide by its setup.sh; run by the PreToolUse hook on Bash|PowerShell in
+// .claude/settings.json.
 // A push is refused when one of its refs is main or master (origin main, HEAD:main, +main, :main,
 // refs/heads/main, --delete main), when it names no ref (git push, git push origin) or HEAD and the branch
 // it pushes is main or master, or when it pushes every branch (--all, --mirror, --branches). A push whose branch is

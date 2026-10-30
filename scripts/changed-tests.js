@@ -7,9 +7,9 @@
 // deleted too:
 //   - a test file (tests/*.test.js) that is still there: itself;
 //   - the test named after the file: tests/<name>.test.js, <name> the file's name without its extension, in lower
-//     case, "_" read as "-" (.claude/hooks/no-main.js: tests/no-main.test.js; scripts/sync_rules.js:
-//     tests/sync-rules.test.js; README.md: tests/readme.test.js); a few files are read by tests named otherwise
-//     (OTHER_READERS below: CLAUDE.md by the rulebook tests, a workflow by lock-repos, ...);
+//     case, "_" read as "-" (.claude/hooks/no-main.js: tests/no-main.test.js; .claude/settings.json:
+//     tests/settings.test.js); a few files are read by tests named otherwise (OTHER_READERS below: CLAUDE.md by the
+//     rulebook tests);
 //   - the code that uses the file: every .js file of the repo that requires it, directly or through other files (a
 //     require of a relative path written out: require('./x'), require('../y.js')), brings its own test, as above, or
 //     runs itself when it is a test.
@@ -25,9 +25,6 @@ const EVERY_TEST = ['package.json', '.github/workflows/tests.yml', 'scripts/chan
 // Files read by tests not named after them: the file, or a folder ending in "/", and those tests.
 const OTHER_READERS = {
   'CLAUDE.md': ['tests/rulebook.test.js', 'tests/rulebook-hooks.test.js'],
-  'REPOS.md': ['tests/repo-map.test.js'],
-  'scripts/repos.txt': ['tests/lock-repos.test.js', 'tests/repo-map.test.js', 'tests/sync-rules.test.js'],
-  '.github/workflows/': ['tests/lock-repos.test.js'], // it reads every workflow for the checks main requires
 };
 const SKIP = new Set(['.git', 'node_modules']);
 

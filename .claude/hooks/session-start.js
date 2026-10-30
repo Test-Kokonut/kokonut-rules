@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // session-start.js: at the start of every chat, signs gcloud in as the reader identity, then feeds the chat its map:
 // the rulebook's index, the repo map and the project dashboard.
-// The same file in every repo, run by the SessionStart hook in .claude/settings.json, and installed machine-wide in a
-// cloud chat by scripts/kokonut-setup.sh (there it runs after the rules are refreshed). It prints, in this order, each
+// Written in kokonut-rules, run by the SessionStart hook in .claude/settings.json, and installed machine-wide in a
+// cloud chat by kokonut-rules' setup.sh (there it runs after the rules are refreshed). It prints, in this order, each
 // part after a blank line:
 //   "Signed in as the reader identity." when the environment holds the reader key (KOKONUT_READER_KEY) and gcloud
 //       has no account yet: the key goes to $HOME/.kokonut-reader.json (mode 600), then

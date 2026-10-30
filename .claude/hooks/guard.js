@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // guard.js: refuses a shell command that calls Upwork's API, login or the production /auth and /sync routes, and a
 // git commit or push whose change holds a key.
-// The same file in every repo, run by the PreToolUse hook on Bash|PowerShell in .claude/settings.json, after
-// no-main.js. Two refusals, each with a one-line reason:
+// Written in kokonut-rules, installed machine-wide by its setup.sh; run by the PreToolUse hook on Bash|PowerShell in
+// .claude/settings.json, after no-main.js. Two refusals, each with a one-line reason:
 //   Upwork (G5): the command holds api.upwork.com, upwork.com/api, www.upwork.com/ab/, or an upwork-sync*.run.app
 //       address followed by /auth or /sync (any case). Text that only names one (grep, echo) is refused too.
 //   A key (G4): the command holds git commit (--amend too) or git push. For a commit, the lines git diff --cached -U0
