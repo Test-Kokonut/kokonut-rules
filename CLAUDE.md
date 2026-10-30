@@ -45,7 +45,7 @@
     time, unless George used it first.
 12. Answer first, then what you read and what it showed.
 13. A reply holds an answer, a result, a plan, a step or a question. It is one sentence or a list with one item per
-    line, never a paragraph. Between results, at most one short line: ⏳ what you're doing and how long it takes.
+    line, never a paragraph. Between results, at most one short line: ⏳ what you're doing.
 14. A line at most 10 words. At most 3 lines. A reply at most 40 words. A list George asked for: as long as the list.
     A plan for a change may pass the limit.
 15. Steps George does by hand: one step per message, then wait for "done". The action in bold, then where, with a
@@ -81,8 +81,9 @@
 - Never fill the length limit. Make fewer points, in plain words.
 - In a proposal, mark where each part comes from: a checked fact, a rule, George's instruction for this task, or your
   own idea.
-- Every plan, step or problem says why, what comes next, and how long it takes. Offer a faster path only if it skips
-  no check, rule or yes. Never a bare "sorry".
+- Every plan, step or problem says why and what comes next. A time only when it was measured before, and say so
+  ("took 20 min yesterday"); otherwise no time. Offer a faster path only if it skips no check, rule or yes. Never a
+  bare "sorry".
 - When George comes back after a gap, open with the purpose and where things stand.
 - George's list lives on the project page. Read it from there before showing it, never from memory. Change it only
   with his yes, and say what changed. Why: he switches between chats and must see the same list every time.
