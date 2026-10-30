@@ -208,7 +208,7 @@ cat >"$KK/make-settings.js.new" <<'MAKE' || return 1
 // Written by kokonut-rules' setup.sh. It is kokonut-rules' settings (permissions included), with:
 //   every hook command node "$CLAUDE_PROJECT_DIR/.claude/hooks/<name>.js" made sh <dest>/kokonut/once.sh <name>.js;
 //   SessionStart's session-start.js made bash <dest>/kokonut/setup.sh session-start (the refresh, then the hook);
-//   the repos' own rulebook copies excluded (claudeMdExcludes), so the chat loads <dest>/CLAUDE.md alone;
+//   the repos' own rulebook copies excluded at any depth (claudeMdExcludes), so the chat loads <dest>/CLAUDE.md alone;
 //   the installed files (rulebook, settings, hooks, commands, installer) closed to Claude's edit tools (deny Edit(...)).
 // A hook of another form, or a wired hook missing from the folder: one line on stderr, nothing printed, exit 1.
 'use strict';
@@ -236,7 +236,7 @@ try {
   }
   if (!refresh) (s.hooks.SessionStart = s.hooks.SessionStart || []).unshift({ hooks: [{ type: 'command', command: refreshCmd, timeout: 60 }] });
   const add = (list, items) => [...new Set([...(list || []), ...items])];
-  s.claudeMdExcludes = add(s.claudeMdExcludes, ['/home/user/*/CLAUDE.md', '/home/user/*/.claude/CLAUDE.md', '/home/user/*/CLAUDE.local.md']);
+  s.claudeMdExcludes = add(s.claudeMdExcludes, ['/home/user/**/CLAUDE.md', '/home/user/**/.claude/CLAUDE.md', '/home/user/**/CLAUDE.local.md']);
   s.permissions = s.permissions || {};
   s.permissions.deny = add(s.permissions.deny, ['CLAUDE.md', 'settings.json', 'hooks/**', 'commands/**', 'kokonut/**'].map((p) => `Edit(/${path.join(dest, p)})`));
   process.stdout.write(JSON.stringify(s, null, 2) + '\n');
