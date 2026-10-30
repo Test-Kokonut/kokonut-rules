@@ -39,7 +39,7 @@ const LATE_ROOM = 40000;
 const START = 512 * 1024;
 const MAX_READ = 8 * 1024 * 1024;
 const KEEP_STATE_DAYS = 30;
-const QUIZ = /^\s*KOKONUT HANDOVER\s+(\S+)/;
+const QUIZ = /^\s*KOKONUT HANDOVER[ \t]+(\S+)/;
 
 const fmt = (n) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 
