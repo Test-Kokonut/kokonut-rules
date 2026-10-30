@@ -39,9 +39,10 @@
     say "not found", or ask.
 
 # Replies
-11. Readable at a glance. First line: the status icon (✅ done · ⏳ waiting on you · ⬜ not started · ⛔ blocked ·
-    ⚠️ problem · 🆕 new), plus the outcome or the decision George must make. Then short sentences, one idea each.
-    Explain a new name the first time, unless George used it first.
+11. Readable at a glance. First line: one icon, then the outcome or the decision George must make. The icons:
+    👉 your turn (a question, a step or a yes) · ✅ done · ⏳ in progress, nothing needed from George · 💬 answer to
+    his question · ⚠️ problem found · ⛔ blocked. Then short sentences, one idea each. Explain a new name the first
+    time, unless George used it first.
 12. Answer first, then what you read and what it showed.
 13. A reply holds an answer, a result, a plan, a step or a question. It is one sentence or a list with one item per
     line, never a paragraph. Between results, at most one short line: ⏳ what you're doing and how long it takes.
