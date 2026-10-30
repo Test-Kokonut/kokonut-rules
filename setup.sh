@@ -107,7 +107,7 @@ get() {
   fi
   code=$?
   [ "$code" = 0 ] && return 0
-  if [ "$code" = 124 ]; then WHY="download from $BASE timed out"; else WHY="download from $BASE failed: $(tr '\n' ' ' <"$err" | head -c 200)"; fi
+  if [ "$code" = 124 ]; then WHY="download from $BASE timed out"; else WHY="download from $BASE failed: $(tr '\n' ' ' <"$err" | head -c 200 | sed 's/ *$//')"; fi
   return 1
 }
 
