@@ -10,10 +10,15 @@ downloads it with no login.
 - `.claude/settings.json`: the permissions (what a chat does without asking, what always asks first, what is never
   allowed) and the hook wiring, in the project form `node "$CLAUDE_PROJECT_DIR/.claude/hooks/<name>.js"`. The
   installer turns it into the machine-wide /root/.claude/settings.json.
-- `.claude/hooks/`: the hooks. `session-start.js` (the reader identity, the rulebook's index, the repo map, the
-  dashboard), `reminder.js` (the reply rules before every message), `status-check.js` (the status page note),
-  `no-main.js` (no push to main), `guard.js` (no Upwork API or login, no key in a commit) and `rule-guard.js` (rule
-  files change only after George types "rule change ok"). What each does is written at the top of its file.
+- `.claude/hooks/`: the hooks. `session-start.js` (the reader identity, then the start note: where things are and the
+  open projects, one line each), `reminder.js` (the reply rules before every message), `status-check.js` (at the end
+  of a turn: a chat that changed things since its last status page save is refused once, with a note to save it
+  again), `no-main.js` (no push to main), `guard.js` (no Upwork API or login, no key in a commit) and `rule-guard.js`
+  (rule files change only after George types "rule change ok"). What each does is written at the top of its file.
+- `.claude/commands/`: the slash commands. `continue.md`: `/continue <name>` takes a project over, or starts it: its
+  status page's brief (Folder, Chat, Purpose, Done when, State, Next step), its working notes in its Drive folder,
+  and the page's Chat line set to this chat; a new project settles Purpose and Done when with George first, then gets
+  its Drive folder and its page.
 - `setup.sh`: the installer, below. A rule file, as CLAUDE.md and .claude/ are: the rule guard refuses a change to it
   without George's "rule change ok".
 - `tests/`, `scripts/changed-tests.js`, `package.json`: the hooks' and settings' tests (`npm test` runs them all) and
@@ -39,9 +44,10 @@ bash /tmp/kokonut-setup.sh
 ```
 
 - What it does: signs in the reader identity, then downloads `setup.sh` from main and runs it. `setup.sh` downloads
-  main's `CLAUDE.md`, `.claude/settings.json` and hooks from raw.githubusercontent.com and installs them machine-wide
-  in /root/.claude: CLAUDE.md, hooks/, settings.json (its hook commands made absolute, the repos' own CLAUDE.md
-  copies excluded, the installed files closed to Claude's edit tools) and kokonut/ (the installer and what it saw:
+  main's `CLAUDE.md`, `.claude/settings.json`, hooks and commands from raw.githubusercontent.com and installs them
+  machine-wide in /root/.claude: CLAUDE.md, hooks/, commands/ (the commands setup.sh lists in COMMANDS, so every
+  chat has `/continue`), settings.json (its hook commands made absolute, the repos' own CLAUDE.md copies excluded,
+  the installed files closed to Claude's edit tools) and kokonut/ (the installer and what it saw:
   kokonut/setup.txt). Never /home/user/.claude: Claude Code reads it as /home/user's project settings, and the hooks
   would fire twice.
 - At every chat start the SessionStart hook runs the installed `setup.sh` again: it downloads main once more and
@@ -72,5 +78,5 @@ bash /tmp/kokonut-setup.sh
 ## Undo
 - New chats: paste back the earlier setup script (or empty the box) and Save changes; new chats then start without
   the install.
-- In a running chat, after George's "rule change ok": delete /root/.claude/CLAUDE.md, settings.json, hooks/ and
-  kokonut/ (put kokonut/settings.json.before-kokonut back first, if there is one).
+- In a running chat, after George's "rule change ok": delete /root/.claude/CLAUDE.md, settings.json, hooks/,
+  commands/continue.md and kokonut/ (put kokonut/settings.json.before-kokonut back first, if there is one).

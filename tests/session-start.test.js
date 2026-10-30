@@ -4,19 +4,17 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { ROOT, scratch, cleanup, write, runHook } = require('./sandbox');
-const { RULEBOOK } = require('./rulebook-fixture');
-const { start, clearPlaceholder, KEY_FILE, SIGNED_IN, MAP_HEAD, DASHBOARD_HEAD, NO_DASHBOARD } = require('../.claude/hooks/session-start.js');
+const { start, clearPlaceholder, KEY_FILE, SIGNED_IN, WHERE, PROJECTS_HEAD, NO_PROJECTS } = require('../.claude/hooks/session-start.js');
 
 const HOOK = path.join(ROOT, '.claude', 'hooks', 'session-start.js');
 const KEY = '{"type":"service_account","private_key":"-----SECRET-----"}';
 after(cleanup);
 
-// The rulebook's "Index." bullet, cut from the fixture by hand: four lines, the first and three continuations.
-const RB = RULEBOOK.split('\n');
-const at = RB.findIndex((l) => l.startsWith('- Index.'));
-const INDEX = RB.slice(at, at + 4).join('\n');
-const MAP = '# The repos of Test-Kokonut\n\n- **kokonut-temp** (private): Rules.\n';
-const BOARD = '# Dashboard\n\n| Active |\n';
+// A status page of a kokonut-status clone: projects/<name>.md, updated at the time given, with a Purpose.
+function page(base, name, updated, purpose) {
+  write(base, `kokonut-status/projects/${name}.md`, `# ${name}\nUpdated: ${updated} UTC\n\n## Purpose\n${purpose}\n## State\n- x\n`);
+}
+const NONE = [WHERE, NO_PROJECTS];
 
 // A fake gcloud: records each call, answers "auth list" with the accounts given.
 function fakeGcloud(accounts) {
@@ -28,25 +26,10 @@ function fakeGcloud(accounts) {
   return { calls, run };
 }
 
-// gh's stand-ins: none reachable, or GitHub holding the files given ({ 'repo/file': text }).
-const NO_GH = () => { throw new Error('gh: not reachable'); };
-function github(files) {
-  const asked = [];
-  const run = (args) => {
-    asked.push(args.join(' '));
-    const m = /^repos\/Test-Kokonut\/([^/]+)\/contents\/(.+)$/.exec(args[1]);
-    const text = m && files[m[1] + '/' + m[2]];
-    if (text === undefined) throw new Error('HTTP 404');
-    return JSON.stringify({ content: Buffer.from(text).toString('base64'), encoding: 'base64' });
-  };
-  return { asked, run };
-}
-
-function project(withRulebook) {
+function project() {
   const base = scratch();
   const dir = path.join(base, 'kokonut-upwork-sync');
   fs.mkdirSync(dir);
-  if (withRulebook) fs.writeFileSync(path.join(dir, 'CLAUDE.md'), RULEBOOK);
   return { base, dir };
 }
 
@@ -71,10 +54,10 @@ test('the placeholder token: no variable, or no environment file named: nothing 
   assert.strictEqual(clearPlaceholder({ CLOUDSDK_AUTH_ACCESS_TOKEN: 'placeholder' }), false);
 });
 
-test('no key: nothing printed, gcloud never called', () => {
+test('no key: no sign-in line, gcloud never called', () => {
   const { base, dir } = project();
   const g = fakeGcloud('');
-  assert.deepStrictEqual(start({ env: {}, run: g.run, home: base, projectDir: dir, gh: NO_GH }), [NO_DASHBOARD]);
+  assert.deepStrictEqual(start({ env: {}, run: g.run, home: base, projectDir: dir }), NONE);
   assert.strictEqual(g.calls.length, 0);
 });
 
@@ -82,8 +65,8 @@ test('key and no account: writes the key file, signs in, sets the project, print
   const { base, dir } = project();
   const g = fakeGcloud('');
   const env = { KOKONUT_READER_KEY: KEY, CLOUDSDK_AUTH_ACCESS_TOKEN: 'placeholder', KEEP: '1' };
-  const lines = start({ env, run: g.run, home: base, projectDir: dir, gh: NO_GH });
-  assert.deepStrictEqual(lines, [SIGNED_IN, NO_DASHBOARD]);
+  const lines = start({ env, run: g.run, home: base, projectDir: dir });
+  assert.deepStrictEqual(lines, [SIGNED_IN, ...NONE]);
   const file = path.join(base, KEY_FILE);
   assert.strictEqual(fs.readFileSync(file, 'utf8'), KEY);
   if (process.platform !== 'win32') assert.strictEqual(fs.statSync(file).mode & 0o777, 0o600);
@@ -102,7 +85,7 @@ test('key and no account: writes the key file, signs in, sets the project, print
 test('an account already signed in: nothing written, nothing printed', () => {
   const { base, dir } = project();
   const g = fakeGcloud('reader@kokonut-data-base.iam.gserviceaccount.com\n');
-  assert.deepStrictEqual(start({ env: { KOKONUT_READER_KEY: KEY }, run: g.run, home: base, projectDir: dir, gh: NO_GH }), [NO_DASHBOARD]);
+  assert.deepStrictEqual(start({ env: { KOKONUT_READER_KEY: KEY }, run: g.run, home: base, projectDir: dir }), NONE);
   assert.strictEqual(g.calls.length, 1);
   assert.ok(!fs.existsSync(path.join(base, KEY_FILE)));
 });
@@ -110,76 +93,69 @@ test('an account already signed in: nothing written, nothing printed', () => {
 test('gcloud fails: nothing printed, no error', () => {
   const { base, dir } = project();
   const run = () => { throw new Error('gcloud: not found'); };
-  assert.deepStrictEqual(start({ env: { KOKONUT_READER_KEY: KEY }, run, home: base, projectDir: dir, gh: NO_GH }), [NO_DASHBOARD]);
+  assert.deepStrictEqual(start({ env: { KOKONUT_READER_KEY: KEY }, run, home: base, projectDir: dir }), NONE);
 });
 
-test('after the sign-in, in order: the Index bullet, the repo map, the dashboard; each part after a blank line', () => {
-  const { base, dir } = project(true);
-  write(dir, 'REPOS.md', MAP);
-  write(base, 'kokonut-status/DASHBOARD.md', BOARD);
+test('after the sign-in, in order: where things are, the open projects; each part after a blank line', () => {
+  const { base, dir } = project();
+  page(base, '2026-10-30_example', '2026-10-30 15:20', 'George: "a short purpose"');
   const g = fakeGcloud('');
-  const parts = start({ env: { KOKONUT_READER_KEY: KEY }, run: g.run, home: base, projectDir: dir, gh: NO_GH });
-  assert.deepStrictEqual(parts, [SIGNED_IN, INDEX, MAP_HEAD + '\n' + MAP.trim(), DASHBOARD_HEAD + '\n' + BOARD.trim()]);
-  assert.match(INDEX, /^- Index\. The repos: REPOS\.md in kokonut-temp;[\s\S]*\n {2}https:\/\/drive\.google\.com\/drive\/folders\/EXAMPLE-folder-id$/);
-  assert.strictEqual(MAP_HEAD, 'REPOS.md:');
-  assert.strictEqual(DASHBOARD_HEAD, 'DASHBOARD.md (kokonut-status):');
+  const parts = start({ env: { KOKONUT_READER_KEY: KEY }, run: g.run, home: base, projectDir: dir });
+  assert.deepStrictEqual(parts, [SIGNED_IN, WHERE, PROJECTS_HEAD + '\n- 2026-10-30_example: "a short purpose"']);
+  assert.match(WHERE, /^Where things are:\n- Repo map: REPOS\.md in kokonut-temp\.\n[\s\S]*https:\/\/drive\.google\.com\/drive\/folders\/1O-b-xz-JTbHesM9S5GdB3OpecQZoJQjy\n- Rules: kokonut-rules/);
 });
 
-test('the repo map: the project\'s REPOS.md, else ../kokonut-temp/REPOS.md, else kokonut-temp\'s from GitHub, else left out', () => {
-  const { base, dir } = project(true);
+test('the projects: kokonut-status beside the project folder, else inside it, else in the cloud\'s folder, else the one line', () => {
+  const { base, dir } = project();
+  const cloud = scratch();
+  const list = () => start({ env: {}, run: () => '', home: base, projectDir: dir }).pop();
+  const before = process.env.KOKONUT_REPOS_DIR;
+  try {
+    process.env.KOKONUT_REPOS_DIR = cloud;
+    assert.strictEqual(list(), NO_PROJECTS);
+    page(cloud, 'cloud', '2026-10-01 10:00', 'from the cloud folder');
+    assert.strictEqual(list(), PROJECTS_HEAD + '\n- cloud: from the cloud folder');
+    page(dir, 'inside', '2026-10-01 10:00', 'from inside');
+    assert.strictEqual(list(), PROJECTS_HEAD + '\n- inside: from inside');
+    page(base, 'beside', '2026-10-01 10:00', 'from beside');
+    assert.strictEqual(list(), PROJECTS_HEAD + '\n- beside: from beside');
+  } finally {
+    process.env.KOKONUT_REPOS_DIR = before;
+  }
+});
+
+test('the projects: newest first, the first words of each Purpose, at most 40 lines and a count of the rest', () => {
+  const { base, dir } = project();
   const g = fakeGcloud('');
-  const map = (gh) => start({ env: {}, run: g.run, home: base, projectDir: dir, gh }).find((p) => p.startsWith(MAP_HEAD));
-  assert.strictEqual(map(NO_GH), undefined);
-  const hub = github({ 'kokonut-temp/REPOS.md': 'from GitHub\n' });
-  assert.strictEqual(map(hub.run), MAP_HEAD + '\nfrom GitHub');
-  assert.ok(hub.asked.includes('api repos/Test-Kokonut/kokonut-temp/contents/REPOS.md'));
-  write(base, 'kokonut-temp/REPOS.md', 'beside\n');
-  assert.strictEqual(map(hub.run), MAP_HEAD + '\nbeside');
-  write(dir, 'REPOS.md', 'own\n');
-  assert.strictEqual(map(hub.run), MAP_HEAD + '\nown');
+  const list = () => start({ env: {}, run: g.run, home: base, projectDir: dir }).pop().split('\n');
+  page(base, 'old', '2026-10-01 10:00', '- George, 1 Oct 2026: the oldest page');
+  page(base, 'new', '2026-10-30 10:00', 'Fix the chat setup at its core: a lean start that does not drift, and continuations as good');
+  write(base, 'kokonut-status/projects/bare.md', '# bare\nUpdated: 2026-10-15 10:00 UTC\n\n## State\n- x\n');
+  assert.deepStrictEqual(list(), [PROJECTS_HEAD, '- new: Fix the chat setup at its core: a lean start that does not drift, and…',
+    '- bare', '- old: the oldest page']);
+  for (let i = 0; i < 45; i++) page(base, `p${String(i).padStart(2, '0')}`, '2026-10-20 10:00', 'x');
+  const lines = list();
+  assert.strictEqual(lines.length, 1 + 40 + 1);
+  assert.match(lines[41], /^- and 8 more: node .*kokonut-status.scripts.status\.js list$/);
 });
 
-test('the dashboard: ../kokonut-status/DASHBOARD.md, else from GitHub, else the one line; at most 200 lines', () => {
-  const { base, dir } = project(false);
-  const g = fakeGcloud('');
-  const last = (gh) => start({ env: {}, run: g.run, home: base, projectDir: dir, gh }).pop();
-  assert.strictEqual(last(NO_GH), 'Dashboard: attach kokonut-status and read DASHBOARD.md');
-  const long = Array.from({ length: 250 }, (_, i) => 'line ' + (i + 1)).join('\n');
-  const hub = github({ 'kokonut-status/DASHBOARD.md': long });
-  const fromHub = last(hub.run);
-  assert.strictEqual(fromHub.split('\n').length, 201);
-  assert.strictEqual(fromHub.split('\n')[200], 'line 200');
-  assert.ok(hub.asked.includes('api repos/Test-Kokonut/kokonut-status/contents/DASHBOARD.md'));
-  write(base, 'kokonut-status/DASHBOARD.md', BOARD);
-  assert.strictEqual(last(hub.run), DASHBOARD_HEAD + '\n' + BOARD.trim());
-});
-
-test('a rulebook without "# The repos" or without its Index bullet: that part alone is left out', () => {
-  const { base, dir } = project(false);
-  const g = fakeGcloud('');
-  fs.writeFileSync(path.join(dir, 'CLAUDE.md'), '# The repos\n- A new repo:\n  1. Add it.\n');
-  write(dir, 'REPOS.md', MAP);
-  assert.deepStrictEqual(start({ env: {}, run: g.run, home: base, projectDir: dir, gh: NO_GH }), [MAP_HEAD + '\n' + MAP.trim(), NO_DASHBOARD]);
-});
-
-test('as a hook in a cloud session without kokonut-status, without a key and without gh: the dashboard line alone', () => {
-  const { base, dir } = project(false);
+test('as a hook in a cloud session without kokonut-status and without a key: where things are, and the one line', () => {
+  const { base, dir } = project();
   const r = runHook(HOOK, { hook_event_name: 'SessionStart', cwd: dir }, {
     CLAUDE_CODE_REMOTE: 'true', KOKONUT_READER_KEY: null, HOME: base, CLAUDE_PROJECT_DIR: dir, PATH: scratch(),
   });
   assert.strictEqual(r.status, 0);
-  assert.strictEqual(r.stdout, NO_DASHBOARD + '\n');
+  assert.strictEqual(r.stdout, NONE.join('\n\n') + '\n');
 });
 
-test('as a hook with the rulebook, the map and the dashboard beside: the parts joined by blank lines', () => {
-  const { base, dir } = project(true);
-  write(dir, 'REPOS.md', MAP);
-  write(base, 'kokonut-status/DASHBOARD.md', BOARD);
+test('as a hook with kokonut-status beside: the parts joined by blank lines', () => {
+  const { base, dir } = project();
+  page(base, 'website', '2026-10-30 15:20', 'A new home page');
   const r = runHook(HOOK, { hook_event_name: 'SessionStart', cwd: dir }, {
     KOKONUT_READER_KEY: null, HOME: base, CLAUDE_PROJECT_DIR: dir, PATH: scratch(),
   });
   assert.strictEqual(r.status, 0);
-  assert.strictEqual(r.stdout, [INDEX, MAP_HEAD + '\n' + MAP.trim(), DASHBOARD_HEAD + '\n' + BOARD.trim()].join('\n\n') + '\n');
+  assert.strictEqual(r.stdout, [WHERE, PROJECTS_HEAD + '\n- website: A new home page'].join('\n\n') + '\n');
 });
 
 // A stand-in gcloud on the path (gcloud.cmd on Windows): logs its arguments and whether the token was set.
@@ -205,7 +181,7 @@ test('as a hook with gcloud on the path and no account: signs in without the pla
     CLAUDE_CODE_REMOTE: null, // not a cloud session, wherever the tests run
   });
   assert.strictEqual(r.status, 0);
-  assert.strictEqual(r.stdout, SIGNED_IN + '\n\n' + NO_DASHBOARD + '\n');
+  assert.strictEqual(r.stdout, [SIGNED_IN, ...NONE].join('\n\n') + '\n');
   const file = path.join(base, KEY_FILE);
   assert.deepStrictEqual(g.calls(), [
     { args: ['auth', 'list', '--format=value(account)'], token: null },
@@ -223,7 +199,7 @@ test('as a hook with no gcloud on the path: prints nothing, exits 0, never echoe
     CLAUDE_CODE_REMOTE: null,
   });
   assert.strictEqual(r.status, 0);
-  assert.strictEqual(r.stdout, NO_DASHBOARD + '\n');
+  assert.strictEqual(r.stdout, NONE.join('\n\n') + '\n');
   assert.ok(!r.stdout.includes('SECRET') && !r.stderr.includes('SECRET'));
 });
 

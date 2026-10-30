@@ -1,6 +1,6 @@
 'use strict';
-// A chat is tied by a save (not a read); work after its last save brings one note per unsaved stretch, on George's
-// next message; plus the hook as Claude Code runs it.
+// A chat is tied by a save (not a read); work after its last save refuses the stop with the note, at most once per
+// chat; plus the hook as Claude Code runs it.
 const { test, after } = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -12,7 +12,7 @@ const HOOK = path.join(ROOT, '.claude', 'hooks', 'status-check.js');
 after(cleanup);
 
 let n = 0;
-// A chat: a transcript file, its own state folder, and helpers to add turns and to send George's next message.
+// A chat: a transcript file, its own state folder, and helpers to add turns and to end the chat's turn (a Stop).
 // Every entry carries a uuid, as Claude Code writes them (uuids: false leaves them out).
 function chat(options) {
   const o = Object.assign({ uuids: true }, options || {});
@@ -40,7 +40,7 @@ function chat(options) {
     bash: (command, result, isError) => tool('Bash', { command }, result === undefined ? 'ok' : result, isError),
     use: (name, input) => tool(name, input || {}, 'ok'),
     edit: () => tool('Edit', { file_path: 'x.js', old_string: 'a', new_string: 'b' }, 'ok'),
-    next: (prompt) => decide({ hook_event_name: 'UserPromptSubmit', session_id: session, transcript_path: transcript, prompt: prompt || 'next' }, state),
+    next: () => decide({ hook_event_name: 'Stop', session_id: session, transcript_path: transcript, stop_hook_active: false }, state),
     stateFile: () => path.join(state, `${session}.check.json`),
   };
 }
@@ -48,9 +48,9 @@ const SAVE = 'node ../kokonut-status/scripts/status.js save 2026-10-09_dashboard
 const SAVED = 'SAVED projects/2026-10-09_dashboard.md\n--- BASE def456';
 const NOTE = note('2026-10-09_dashboard');
 
-test('the note: the agreed text, one line, naming the cloud command', () => {
-  assert.strictEqual(note('x'), 'Status note: the page x was saved before later changes. Save it again if the state, a ' +
-    'decision, the next step or a blocker changed (node /home/user/kokonut-status/scripts/status.js read x, edit, save with its BASE).');
+test('the note: the agreed text, one line, naming the new parts and the cloud command', () => {
+  assert.strictEqual(note('x'), 'Status note: the page x was saved before later changes. Save it again if its State, ' +
+    'Done when or Next step changed (node /home/user/kokonut-status/scripts/status.js read x, edit, save with its BASE); otherwise finish.');
   assert.ok(!note('x').includes('\n'));
 });
 
@@ -77,7 +77,7 @@ test('"this is project X" ties nothing', () => {
   assert.strictEqual(c.next(), '');
 });
 
-test('a save ties the chat: work after it brings the note on the next message', () => {
+test('a save ties the chat: work after it refuses the stop with the note', () => {
   const c = chat();
   c.bash(SAVE, SAVED);
   c.edit();
@@ -174,12 +174,12 @@ test('a delete of the tied page unties the chat', () => {
   assert.strictEqual(c.next(), '');
 });
 
-test('once per unsaved stretch: after the note, the next messages are silent, however much more work', () => {
+test('at most once per chat: after the note, the next stops pass, however much more work', () => {
   const c = chat();
   c.bash(SAVE, SAVED);
   c.edit();
   assert.strictEqual(c.next(), NOTE);
-  assert.strictEqual(c.next(), '', 'the same stretch: silent');
+  assert.strictEqual(c.next(), '', 'refused once already: the stop passes');
   for (let i = 0; i < 3; i++) {
     c.edit();
     c.bash('git push -u origin x');
@@ -187,7 +187,7 @@ test('once per unsaved stretch: after the note, the next messages are silent, ho
   }
 });
 
-test('a newer save resets it: work after that save brings the note again, once', () => {
+test('a newer save does not reset it: work after that save passes too; the state file names the page', () => {
   const c = chat();
   c.bash(SAVE, SAVED);
   c.edit();
@@ -195,14 +195,13 @@ test('a newer save resets it: work after that save brings the note again, once',
   c.bash(SAVE, SAVED);
   assert.strictEqual(c.next(), '', 'saved, no work since: nothing to note');
   c.edit();
-  assert.strictEqual(c.next(), NOTE, 'work after the newer save');
-  assert.strictEqual(c.next(), '');
+  assert.strictEqual(c.next(), '', 'work after the newer save: refused once already');
   const kept = JSON.parse(fs.readFileSync(c.stateFile(), 'utf8'));
   assert.strictEqual(kept.project, '2026-10-09_dashboard');
   assert.strictEqual(typeof kept.noted, 'string');
 });
 
-test('without uuids in the transcript, the save\'s tool call is its key: still once per stretch', () => {
+test('without uuids in the transcript, the save\'s tool call is its key: still once per chat', () => {
   const c = chat({ uuids: false });
   c.bash(SAVE, SAVED);
   c.edit();
@@ -210,10 +209,10 @@ test('without uuids in the transcript, the save\'s tool call is its key: still o
   assert.strictEqual(c.next(), '');
   c.bash(SAVE, SAVED);
   c.edit();
-  assert.strictEqual(c.next(), NOTE);
+  assert.strictEqual(c.next(), '');
 });
 
-test('a message before any save, then a save and work: the note then', () => {
+test('a stop before any save, then a save and work: the note then', () => {
   const c = chat();
   c.edit();
   assert.strictEqual(c.next(), '');
@@ -262,16 +261,19 @@ test('a missing transcript or input: nothing', () => {
   assert.strictEqual(decide(null, state), '');
 });
 
-test('as a hook: the note as one plain line on stdout, its state in ~/.claude/status-state, silent after; broken input silent; always exit 0', () => {
+test('as a hook: the refusal as Stop JSON on stdout, its state in ~/.claude/status-state, silent after; a continued stop or broken input silent; always exit 0', () => {
   const c = chat();
   c.bash(SAVE, SAVED);
   c.edit();
   const home = scratch();
   const env = { HOME: home, USERPROFILE: home };
-  const input = { hook_event_name: 'UserPromptSubmit', session_id: c.session, transcript_path: c.transcript, prompt: 'next' };
+  const input = { hook_event_name: 'Stop', session_id: c.session, transcript_path: c.transcript, stop_hook_active: false };
+  const continued = runHook(HOOK, Object.assign({}, input, { stop_hook_active: true }), env);
+  assert.strictEqual(continued.stdout, '', 'a stop already continued by a Stop hook is never refused');
   const r = runHook(HOOK, input, env);
   assert.strictEqual(r.status, 0);
-  assert.strictEqual(r.stdout, NOTE + '\n');
+  assert.deepStrictEqual(JSON.parse(r.stdout), { decision: 'block', reason: NOTE });
+  assert.ok(r.stdout.endsWith('}\n') && r.stdout.split('\n').length === 2, 'one line');
   assert.strictEqual(r.stderr, '');
   assert.ok(fs.existsSync(path.join(home, '.claude', 'status-state', `${c.session}.check.json`)));
   const again = runHook(HOOK, input, env);

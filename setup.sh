@@ -5,6 +5,7 @@
 #   /root/.claude/CLAUDE.md       kokonut-rules' CLAUDE.md, the rulebook the chat loads (the repos' copies excluded)
 #   /root/.claude/hooks/*.js      the hooks kokonut-rules' .claude/settings.json wires, and the hooks they require
 #   /root/.claude/settings.json   kokonut-rules' .claude/settings.json, its hook commands made absolute
+#   /root/.claude/commands/*.md   the slash commands of kokonut-rules' .claude/commands (COMMANDS below): /continue
 #   /root/.claude/kokonut/        this script, once.sh and make-settings.js, and what the last run saw
 # Never /home/user/.claude: Claude Code reads that folder too, as /home/user's project settings, and the hooks would
 # fire twice.
@@ -20,7 +21,8 @@
 # repos the chat attached; raw.githubusercontent.com serves any public repo. Its copies may lag main by up to five
 # minutes. The files: CLAUDE.md, .claude/settings.json, setup.sh, and the hooks: those the settings wire and those
 # they require ('./<name>.js'). All of them downloaded, this copy hands over to the downloaded setup.sh, which does
-# the install: a chat always installs with main's installer.
+# the install: a chat always installs with main's installer. That installer downloads the commands itself, so a copy
+# older than COMMANDS still hands over a full install.
 # Idempotent: a file is rewritten only when its content changes (kokonut/installed, the stamp, aside). No secret is
 # needed. Undo: README.md, "Undo". Tests install elsewhere: KOKONUT_DEST=<folder>, and only there
 # KOKONUT_RULES_BRANCH=<branch> (default main) downloads another branch.
@@ -29,6 +31,8 @@ umask 022
 mode=${1:-setup}
 REAL=/root/.claude
 REPO=Test-Kokonut/kokonut-rules
+# The slash commands installed in <dest>/commands, from kokonut-rules' .claude/commands/. A new command is added here.
+COMMANDS='continue.md'
 NODE=$(command -v node 2>/dev/null) || NODE=/opt/node22/bin/node
 WHY=
 
@@ -142,24 +146,35 @@ download() {
 # ---- Install (run as the downloaded copy: bash <download>/setup.sh install <download> <dest> <mode> <branch>). ----
 
 install_rules() {
-  local tmp n f
+  local tmp n f args
   tmp=$DL/build
-  mkdir -p "$tmp" || { WHY="cannot write in $KK"; return 1; }
+  mkdir -p "$tmp" "$DL/commands" || { WHY="cannot write in $KK"; return 1; }
+  args=()
+  for n in $COMMANDS; do args+=(".claude/commands/$n" "$DL/commands/$n"); done
+  get "${args[@]}" || return 1
+  for n in $COMMANDS; do [ -s "$DL/commands/$n" ] || { WHY="$BASE/.claude/commands/$n is empty"; return 1; }; done
+  printf '%s\n' $COMMANDS >"$tmp/commands.list"
   write_helpers || { WHY="cannot write in $KK"; return 1; }
   if ! "$NODE" "$KK/make-settings.js" "$DL/project.json" "$DL/hooks" "$DEST" >"$tmp/settings.json" 2>"$tmp/err"; then
     WHY="settings: $(head -c 300 "$tmp/err" | tr '\n' ' ')"; return 1
   fi
   (cd "$DL/hooks" && ls -1 -- *.js) >"$tmp/hooks.list" 2>/dev/null && [ -s "$tmp/hooks.list" ] || { WHY="no hook downloaded"; return 1; }
-  # All built: into place. The hooks first, the rulebook, the wiring last; then the hooks main no longer has.
-  mkdir -p "$DEST/hooks" || { WHY="cannot write $DEST/hooks"; return 1; }
+  # All built: into place. The hooks and commands first, the rulebook, the wiring last; then the hooks and commands
+  # main no longer has (only those an earlier install put there: other commands in that folder stay).
+  mkdir -p "$DEST/hooks" "$DEST/commands" || { WHY="cannot write $DEST/hooks or $DEST/commands"; return 1; }
   backup
   for f in "$DL"/hooks/*.js; do put "$f" "$DEST/hooks/${f##*/}" || { WHY="cannot write $DEST/hooks"; return 1; }; done
+  for n in $COMMANDS; do put "$DL/commands/$n" "$DEST/commands/$n" || { WHY="cannot write $DEST/commands"; return 1; }; done
   put "$DL/CLAUDE.md" "$DEST/CLAUDE.md" || { WHY="cannot write $DEST/CLAUDE.md"; return 1; }
   put "$tmp/settings.json" "$DEST/settings.json" || { WHY="cannot write $DEST/settings.json"; return 1; }
   if [ -f "$KK/hooks.list" ]; then
     while read -r n; do grep -qxF "$n" "$tmp/hooks.list" || rm -f "$DEST/hooks/$n"; done <"$KK/hooks.list"
   fi
   put "$tmp/hooks.list" "$KK/hooks.list"
+  if [ -f "$KK/commands.list" ]; then
+    while read -r n; do grep -qxF "$n" "$tmp/commands.list" || rm -f "$DEST/commands/$n"; done <"$KK/commands.list"
+  fi
+  put "$tmp/commands.list" "$KK/commands.list"
   chmod 755 "$DL/setup.sh" && put "$DL/setup.sh" "$KK/setup.sh" || { WHY="cannot write $KK/setup.sh"; return 1; }
   rm -f "$KK/install.sh" # the installer before kokonut-rules (kokonut-temp's scripts/kokonut-setup.sh): no longer wired
   printf 'kokonut-rules %s\n' "$BRANCH" >"$KK/installed"
@@ -193,7 +208,7 @@ cat >"$KK/make-settings.js.new" <<'MAKE' || return 1
 //   every hook command node "$CLAUDE_PROJECT_DIR/.claude/hooks/<name>.js" made sh <dest>/kokonut/once.sh <name>.js;
 //   SessionStart's session-start.js made bash <dest>/kokonut/setup.sh session-start (the refresh, then the hook);
 //   the repos' own rulebook copies excluded (claudeMdExcludes), so the chat loads <dest>/CLAUDE.md alone;
-//   the installed files closed to Claude's edit tools (deny Edit(...)).
+//   the installed files (rulebook, settings, hooks, commands, installer) closed to Claude's edit tools (deny Edit(...)).
 // A hook of another form, or a wired hook missing from the folder: one line on stderr, nothing printed, exit 1.
 'use strict';
 const fs = require('fs');
@@ -222,7 +237,7 @@ try {
   const add = (list, items) => [...new Set([...(list || []), ...items])];
   s.claudeMdExcludes = add(s.claudeMdExcludes, ['/home/user/*/CLAUDE.md', '/home/user/*/.claude/CLAUDE.md', '/home/user/*/CLAUDE.local.md']);
   s.permissions = s.permissions || {};
-  s.permissions.deny = add(s.permissions.deny, ['CLAUDE.md', 'settings.json', 'hooks/**', 'kokonut/**'].map((p) => `Edit(/${path.join(dest, p)})`));
+  s.permissions.deny = add(s.permissions.deny, ['CLAUDE.md', 'settings.json', 'hooks/**', 'commands/**', 'kokonut/**'].map((p) => `Edit(/${path.join(dest, p)})`));
   process.stdout.write(JSON.stringify(s, null, 2) + '\n');
 } catch (e) {
   process.stderr.write(String(e && e.message ? e.message : e).split('\n')[0] + '\n');

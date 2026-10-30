@@ -51,18 +51,19 @@ test("deny: the GitHub connector's write tools, which write to any branch past t
   assert.strictEqual(settings.hooks.PreToolUse[0].matcher, 'Bash|PowerShell', 'the push guard sees only shell commands');
 });
 
-test('hooks: session start; reminder, then status note; no-main, guard, then rule-guard on shell commands; rule-guard on edits; no Stop hook; every hook file present, every hook file used', () => {
+test('hooks: session start; reminder; no-main, guard, then rule-guard on shell commands; rule-guard on edits; the status check at the stop; every hook file present, every hook file used', () => {
   assert.strictEqual(settings.disableWorkflows, true);
   const hooks = settings.hooks;
   const file = (h) => /\$CLAUDE_PROJECT_DIR\/\.claude\/hooks\/(.+?)"/.exec(h.command)[1];
   const shape = (event) => hooks[event].map((g) => ({ matcher: g.matcher, hooks: g.hooks.map((h) => [file(h), h.timeout]) }));
   assert.deepStrictEqual(shape('SessionStart'), [{ matcher: undefined, hooks: [['session-start.js', 60]] }]);
-  assert.deepStrictEqual(shape('UserPromptSubmit'), [{ matcher: undefined, hooks: [['reminder.js', 10], ['status-check.js', 10]] }]);
+  assert.deepStrictEqual(shape('UserPromptSubmit'), [{ matcher: undefined, hooks: [['reminder.js', 10]] }]);
   assert.deepStrictEqual(shape('PreToolUse'), [
     { matcher: 'Bash|PowerShell', hooks: [['no-main.js', 10], ['guard.js', 20], ['rule-guard.js', 30]] },
     { matcher: 'Edit|Write|MultiEdit|NotebookEdit', hooks: [['rule-guard.js', 30]] },
   ]);
-  assert.deepStrictEqual(Object.keys(hooks), ['SessionStart', 'UserPromptSubmit', 'PreToolUse'], 'no Stop hook: the push check is gone, the status check is a note');
+  assert.deepStrictEqual(shape('Stop'), [{ matcher: undefined, hooks: [['status-check.js', 10]] }]);
+  assert.deepStrictEqual(Object.keys(hooks), ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'Stop'], 'the one Stop hook is the status check: the push check is gone');
   const used = [];
   for (const event of Object.keys(hooks)) {
     for (const group of hooks[event]) {
