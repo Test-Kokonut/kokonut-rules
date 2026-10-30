@@ -1,0 +1,37 @@
+name: pr-cause
+# When a pull request is opened, edited or gets new commits: fails unless its description has a "Cause:" line and a
+# "Fix:" line, each with text after the colon (any case; a list marker or bold around the word is fine). The same
+# reading as kokonut-temp's checks/pr-cause.js (its found()), written out here: this repo is public, and a public repo
+# cannot use kokonut-temp's private actions. Editing the description runs it again. The job keeps its name, cause:
+# main's ruleset requires that check.
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
+permissions:
+  contents: read
+jobs:
+  cause:
+    runs-on: ubuntu-latest
+    steps:
+      - name: The pull request names its cause and fix
+        run: |
+          node - <<'JS'
+          const fs = require('fs');
+          const event = JSON.parse(fs.readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'));
+          if (!event.pull_request) throw new Error('pr-cause: the event has no pull_request; this check runs on a pull_request event.');
+          const LINE = /^\s*(?:[-*+]\s+)?(?:\*\*|__)?(cause|fix)(?:\*\*|__)?\s*:(.*)$/i;
+          const has = { cause: false, fix: false };
+          for (const line of String(event.pull_request.body || '').split(/\r?\n/)) {
+            const m = LINE.exec(line);
+            if (m && m[2].replace(/[\s*_]+/g, '')) has[m[1].toLowerCase()] = true;
+          }
+          const missing = [];
+          if (!has.cause) missing.push('pr-cause: the pull request has no "Cause:" line: the exact line, setting or rule that produced the symptom, with the evidence.');
+          if (!has.fix) missing.push('pr-cause: the pull request has no "Fix:" line: how the change removes that cause.');
+          if (missing.length) {
+            for (const l of missing) console.log(l);
+            console.log('pr-cause: add both lines to the pull request description; the check runs again on the edit.');
+            process.exit(1);
+          }
+          console.log('pr-cause: Cause and Fix present.');
+          JS

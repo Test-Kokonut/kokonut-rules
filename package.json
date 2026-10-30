@@ -1,0 +1,11 @@
+{
+  "name": "kokonut-rules",
+  "private": true,
+  "description": "Kokonut's rulebook, Claude Code settings and hooks, and the installer every cloud chat runs.",
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

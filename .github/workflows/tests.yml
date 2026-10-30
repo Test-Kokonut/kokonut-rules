@@ -1,0 +1,27 @@
+name: tests
+# On a pull request, and on a push to any branch but main (main changes only by a pull request, tested already): the
+# tests of what the change touches, as scripts/changed-tests.js picks them (the tests of the changed files and of the
+# code that uses them); no test for the change: the job passes. The job keeps its name, test: main's ruleset
+# requires that check. The checkout holds the whole history, to compare the change with the base branch.
+on:
+  push:
+    branches-ignore: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: The tests of what changed
+        run: |
+          tests=$(node scripts/changed-tests.js --base "${GITHUB_BASE_REF:-main}")
+          if [ -z "$tests" ]; then echo "No test for this change."; exit 0; fi
+          echo "$tests"
+          node --test $tests
