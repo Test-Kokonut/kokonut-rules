@@ -1,6 +1,6 @@
 'use strict';
-// A chat is tied by a save (not a read); work after its last save refuses the stop with the note, at most once per
-// chat; plus the hook as Claude Code runs it.
+// Work after the last folder write (a save, not a read), or in a chat never written, refuses the stop with the note,
+// once per unsaved stretch; plus the hook as Claude Code runs it.
 const { test, after } = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -46,35 +46,35 @@ function chat(options) {
 }
 const SAVE = 'node ../kokonut-status/scripts/status.js save 2026-10-09_dashboard page.md --base abc123 --message "x"';
 const SAVED = 'SAVED projects/2026-10-09_dashboard.md\n--- BASE def456';
-const NOTE = note('2026-10-09_dashboard');
+const NOTE = note();
 
-test('the note: the agreed text, one line, naming the new parts and the cloud command', () => {
-  assert.strictEqual(note('x'), 'Status note: the page x was saved before later changes. Save it again if its State, ' +
-    'Done when or Next step changed (node /home/user/kokonut-status/scripts/status.js read x, edit, save with its BASE); otherwise finish.');
-  assert.ok(!note('x').includes('\n'));
+test('the note: the agreed text, one line', () => {
+  assert.strictEqual(note(), 'Stop check: things changed since the project folder was last written. ' +
+    'Write the project notes (and save the page if State or Next step changed) before ending.');
+  assert.ok(!note().includes('\n'));
 });
 
-test('a chat that never saved is never noted', () => {
+test('a chat that never saved: its work refuses the stop', () => {
   const c = chat();
   c.say('Fix the bug.');
   c.edit();
   c.bash('git commit -m x');
-  assert.strictEqual(c.next(), '');
+  assert.strictEqual(c.next(), NOTE);
 });
 
-test('a read alone ties nothing', () => {
+test('a read alone is no folder write', () => {
   const c = chat();
   c.bash('node ../kokonut-status/scripts/status.js read 2026-10-09_dashboard', 'page\n--- BASE abc123');
   c.edit();
   c.bash('git push -u origin x');
-  assert.strictEqual(c.next(), '');
+  assert.strictEqual(c.next(), NOTE);
 });
 
-test('"this is project X" ties nothing', () => {
+test('"this is project X" is no folder write', () => {
   const c = chat();
   c.say('this is project website');
   c.edit();
-  assert.strictEqual(c.next(), '');
+  assert.strictEqual(c.next(), NOTE);
 });
 
 test('a save ties the chat: work after it refuses the stop with the note', () => {
@@ -95,7 +95,7 @@ test('a save with --base new ties the chat', () => {
   const c = chat();
   c.bash('node status.js save website page.md --base new', 'SAVED projects/website.md\n--- BASE 1');
   c.edit();
-  assert.strictEqual(c.next(), note('website'));
+  assert.strictEqual(c.next(), NOTE);
 });
 
 test('a quoted page name ties the chat too, from any path to status.js', () => {
@@ -151,30 +151,30 @@ test('work before the save does not count', () => {
   assert.strictEqual(c.next(), '');
 });
 
-test('a save that failed ties nothing', () => {
+test('a save that failed is no folder write', () => {
   const c = chat();
   c.bash(SAVE, 'OVERLAP: another chat changed the page', true);
   c.bash(SAVE, 'Page refused by the shape check');
   c.edit();
-  assert.strictEqual(c.next(), '');
+  assert.strictEqual(c.next(), NOTE);
 });
 
-test('a save of a facts page ties nothing', () => {
+test('a save of a facts page is no folder write', () => {
   const c = chat();
   c.bash('node status.js save facts/the-book page.md --base abc', 'SAVED facts/the-book.md\n--- BASE x');
   c.edit();
-  assert.strictEqual(c.next(), '');
+  assert.strictEqual(c.next(), NOTE);
 });
 
-test('a delete of the tied page unties the chat', () => {
+test('a delete of the page is no folder write', () => {
   const c = chat();
   c.bash(SAVE, SAVED);
   c.bash('node status.js delete 2026-10-09_dashboard --base def456 --reason kill', 'DELETED projects/2026-10-09_dashboard.md');
   c.edit();
-  assert.strictEqual(c.next(), '');
+  assert.strictEqual(c.next(), NOTE);
 });
 
-test('at most once per chat: after the note, the next stops pass, however much more work', () => {
+test('once per unsaved stretch: after the note, the next stops pass, however much more work', () => {
   const c = chat();
   c.bash(SAVE, SAVED);
   c.edit();
@@ -187,7 +187,7 @@ test('at most once per chat: after the note, the next stops pass, however much m
   }
 });
 
-test('a newer save does not reset it: work after that save passes too; the state file names the page', () => {
+test('a newer save starts a new stretch: work after that save is refused again; the state file names the page', () => {
   const c = chat();
   c.bash(SAVE, SAVED);
   c.edit();
@@ -195,13 +195,13 @@ test('a newer save does not reset it: work after that save passes too; the state
   c.bash(SAVE, SAVED);
   assert.strictEqual(c.next(), '', 'saved, no work since: nothing to note');
   c.edit();
-  assert.strictEqual(c.next(), '', 'work after the newer save: refused once already');
+  assert.strictEqual(c.next(), NOTE, 'work after the newer save: refused again');
   const kept = JSON.parse(fs.readFileSync(c.stateFile(), 'utf8'));
   assert.strictEqual(kept.project, '2026-10-09_dashboard');
   assert.strictEqual(typeof kept.noted, 'string');
 });
 
-test('without uuids in the transcript, the save\'s tool call is its key: still once per chat', () => {
+test('without uuids in the transcript, the save\'s tool call is its key: still once per stretch', () => {
   const c = chat({ uuids: false });
   c.bash(SAVE, SAVED);
   c.edit();
@@ -209,13 +209,13 @@ test('without uuids in the transcript, the save\'s tool call is its key: still o
   assert.strictEqual(c.next(), '');
   c.bash(SAVE, SAVED);
   c.edit();
-  assert.strictEqual(c.next(), '');
+  assert.strictEqual(c.next(), NOTE);
 });
 
-test('a stop before any save, then a save and work: the note then', () => {
+test('a stop before any save: the note; then a save and work: the note again', () => {
   const c = chat();
   c.edit();
-  assert.strictEqual(c.next(), '');
+  assert.strictEqual(c.next(), NOTE);
   c.bash(SAVE, SAVED);
   c.edit();
   assert.strictEqual(c.next(), NOTE);
@@ -228,7 +228,7 @@ test('two chats are counted apart', () => {
   a.edit();
   b.edit();
   assert.strictEqual(a.next(), NOTE);
-  assert.strictEqual(b.next(), '');
+  assert.strictEqual(b.next(), NOTE);
 });
 
 test("the kokonut-status copy's state file in the same folder is neither read nor written", () => {
@@ -239,7 +239,7 @@ test("the kokonut-status copy's state file in the same folder is neither read no
   fs.mkdirSync(c.state, { recursive: true });
   const kept = JSON.stringify({ v: 2, offset: 99999, project: 'website', workSinceSave: 5, pendingSaves: {}, fired: false });
   fs.writeFileSync(theirs, kept);
-  assert.strictEqual(c.next(), '', 'its project is not taken over: a read ties nothing');
+  assert.strictEqual(c.next(), NOTE, 'its project is not taken over: a read is no folder write');
   c.bash(SAVE, SAVED);
   c.edit();
   assert.strictEqual(c.next(), NOTE);
