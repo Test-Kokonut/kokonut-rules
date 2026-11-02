@@ -14,11 +14,10 @@ downloads it with no login.
   chat's effort (the new chat's first prompt is `/effort <level>`). George changes either per chat (/model, /effort).
   The installer turns it into the machine-wide /root/.claude/settings.json.
 - `.claude/hooks/`: the hooks. `session-start.js` (the reader identity, then the start note: where things are and the
-  open projects, one line each), `reminder.js` (the reply rules before every message), `status-check.js` (at the end
-  of a turn: a chat that changed things since its last status page save is refused once, with a note to save it
-  again), `handover-check.js` (the hand-over, below), `no-main.js` (no push to main), `guard.js` (no Upwork API or
-  login, no key in a commit) and `rule-guard.js` (rule files change only after George types "rule change ok"). What
-  each does is written at the top of its file.
+  open projects, one line each), `reminder.js` (the reply rules before every message), `status-check.js` (the stop
+  check, below), `handover-check.js` (the hand-over, below), `no-main.js` (no push to main), `guard.js` (no Upwork API
+  or login, no key in a commit) and `rule-guard.js` (rule files change only after George types "rule change ok").
+  What each does is written at the top of its file.
 - `.claude/commands/`: the slash commands. `continue.md`: `/continue <name>` takes a project over, or starts it: its
   status page's brief (Folder, Chat, Purpose, Done when, State, Next step), its working notes in its Drive folder,
   and the page's Chat line set to this chat; a new project settles Purpose and Done when with George first, then gets
@@ -67,6 +66,21 @@ bash /tmp/kokonut-setup.sh
   the installed one steps aside, so each hook fires once.
 - Paste the box again only when the box above changes. A change to `setup.sh` itself reaches chats on its own: each run
   hands over to the `setup.sh` it downloaded.
+
+## The stop check
+- Why: the project folder holds what a chat did (the working notes and the status page), so the next chat, or
+  George, picks up from there.
+- A folder write: a status page save (`status.js save` or `new`, its result SAVED), or a write of the `notes` file in
+  the project's Drive folder (a Drive or Docs `create_file`, `update_file` or `update_doc` call on the file titled
+  `notes`, named by its title or by its id).
+- Work: edits, writes, helpers, commits, pushes, merges, artifact publishes, scheduled-task changes, deploys and
+  other gcloud or bq changes.
+- At the end of a turn with work since the last folder write (`status-check.js`, the Stop hook), the stop is refused
+  once, with one line: "Stop check: things changed since the project folder was last written. Write the project
+  notes (and save the page if State or Next step changed) before ending." The next stop passes, however much more
+  work; new work after a folder write is refused again.
+- Never refused: a chat that never wrote its folder, a stop already continued by a Stop hook, a helper. An error
+  never blocks.
 
 ## The hand-over (rule 22)
 - Why: a chat compacts (summarises its own past) at about 784,000 tokens of context and loses detail. Before that, it

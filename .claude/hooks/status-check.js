@@ -1,25 +1,34 @@
 #!/usr/bin/env node
-// status-check.js: keeps a chat's status page current: when a chat saved its page and then changed more, the end of
-// its turn is refused once, with a one-line note to save the page again.
+// status-check.js: the stop check: a chat that changed things since it last wrote its project folder may not end its
+// turn without writing it: the end of the turn is refused once, with a one-line note to write the project notes.
 // Written in kokonut-rules, run by the Stop hook in .claude/settings.json, and installed machine-wide in a cloud chat
 // by kokonut-rules' setup.sh. The refusal is Claude Code's Stop answer {"decision": "block", "reason": <the note>} on
-// stdout: the chat goes on with the note, saves the page or finishes. It replaced its UserPromptSubmit version (a note
-// on George's next message, which came after the chat had already stopped).
+// stdout: the chat goes on with the note, writes the notes or finishes.
 // It reads the transcript (the same reading code as reminder.js), from its start at every stop:
-//   - a chat is tied to a page once it saves or creates that page with status.js (status.js save <name> or
-//     status.js new <name>) and the call's result says SAVED; a read alone ties nothing, a facts/ page ties nothing,
-//     a failed save ties nothing, and a delete of that page (DELETED) unties the chat;
-//   - work is an Edit, Write, MultiEdit, NotebookEdit, Agent, Task or Workflow call, or a command with git commit,
-//     push or merge, a gcloud deploy, update, create, delete or execute, or bq query, rm, mk or load; a command that
-//     calls status.js is not work.
-// When a tied chat has work after its last save, the stop is refused with one line: "Status note: the page <name> was
-// saved before later changes. Save it again if its State, Done when or Next step changed (node
-// /home/user/kokonut-status/scripts/status.js read <name>, edit, save with its BASE); otherwise finish." The path is
-// the cloud's clone of kokonut-status, so the command works from any folder of the chat, /home/user included.
-// It fires at most once per chat: its state file, ~/.claude/status-state/<session id>.check.json, is written before
-// the stop is refused, and a chat with that file is never refused again; a stop that Claude Code already marks as
-// continued by a Stop hook (stop_hook_active) is never refused either. State files older than 30 days are removed. A
-// transcript over 20 MB is read from its last 2 MB only: a save before that is not seen, and the chat counts as untied.
+//   - a folder write is a save of the project's status page, or a write of the project's working notes:
+//       - a page save: status.js save <name> or status.js new <name> whose result says SAVED; a read is none, a
+//         facts/ page is none, a failed save is none;
+//       - a notes write: a Google Drive or Google Docs create_file, update_file or update_doc call (the connector's
+//         part of the tool's name may be a uuid: only the end of the name counts) on the file named notes: its title
+//         in the call (create_file, update_file), or its id (fileId, documentId) where an earlier connector result
+//         (search_files, get_file_metadata, create_file) gave that id with the title notes; a call that failed is
+//         none;
+//     the chat's first folder write ties it to its project; a delete of its page (status.js delete <name>, DELETED)
+//     unties it; a chat never tied is never refused;
+//   - work is an Edit, Write, MultiEdit, NotebookEdit, Agent, Task or Workflow call, an artifact publish or delete
+//     (Artifact), a scheduled task created, changed or deleted (create_trigger, update_trigger, delete_trigger), or a
+//     command with git commit, push or merge, a gcloud deploy, update, create, delete or execute, or bq query, rm, mk
+//     or load; a command that calls status.js is not work.
+// When a tied chat has work after its last folder write, the stop is refused with one line: "Stop check: things
+// changed since the project folder was last written. Write the project notes (and save the page if State or Next step
+// changed) before ending."
+// Once per unsaved stretch: its state file, ~/.claude/status-state/<session id>.check.json, holds the last folder
+// write the chat was refused after, and is written before the stop is refused. A stop after that write is never
+// refused again, however much more work; a folder write after it starts a new stretch, and new work after that write
+// is refused again. A stop that Claude Code already marks as continued by a Stop hook (stop_hook_active) is never
+// refused, and a helper's turns (isSidechain) count for nothing. State files older than 30 days are removed. A
+// transcript over 20 MB is read from its last 2 MB only: a folder write before that is not seen (nor a notes id
+// given before that), and the chat counts as untied.
 // Node only, no packages, Windows and Linux. An error never blocks: it prints nothing and always exits 0.
 'use strict';
 const fs = require('fs');
@@ -28,7 +37,6 @@ const path = require('path');
 
 const STATE_DIR = path.join(os.homedir(), '.claude', 'status-state');
 const STATE_SUFFIX = '.check.json';
-const STATUS_JS = '/home/user/kokonut-status/scripts/status.js'; // the cloud's clone: works from any folder
 const KEEP_STATE_DAYS = 30;
 const BIG = 20 * 1024 * 1024;
 const TAIL = 2 * 1024 * 1024;
@@ -36,6 +44,12 @@ const TAIL = 2 * 1024 * 1024;
 const STATUS_CALL = /status\.js["']?\s+(read|save|new|delete)\s+["']?(?!facts\/)([a-z0-9]+(?:[-_][a-z0-9]+)*)/g;
 const WORK_TOOLS = new Set(['Edit', 'Write', 'NotebookEdit', 'MultiEdit', 'Agent', 'Task', 'Workflow']);
 const WORK_COMMAND = /\bgit\s+(commit|push|merge)\b|\bgcloud\b[^\n]*\b(deploy|update|create|delete|execute)\b|\bbq\s+(query|rm|mk|load)\b/;
+const WORK_TRIGGER = /^mcp__.+__(create_trigger|update_trigger|delete_trigger)$/;
+const ARTIFACT_WRITES = new Set([undefined, 'publish', 'delete']);
+// A connector call that writes a Drive file or a Doc; the notes are the file whose title is notes.
+const NOTES_WRITE = /^mcp__.+__(create_file|update_file|update_doc)$/;
+const NOTES_TITLE = /"title"\s*:\s*"\s*notes\s*"/i;
+const isNotes = (title) => typeof title === 'string' && title.trim().toLowerCase() === 'notes';
 
 // ---- Reading the transcript: the same code as reminder.js. ----
 
@@ -68,13 +82,38 @@ function textOf(content) {
   return content.filter((b) => b && b.type === 'text' && typeof b.text === 'string').map((b) => b.text).join('\n');
 }
 
-// ---- The page the chat saved last, and the work since. ----
+// ---- The last folder write, and the work since. ----
 
-// { project, key, work }: the page the chat is tied to (null: none), the key of its last save's result and the work
-// done since that save.
+// The ids a connector's result gives for files titled notes: one file (create_file, get_file_metadata) or a list
+// (search_files: {"files": [...]}).
+function learnNotes(out, ids) {
+  if (!NOTES_TITLE.test(out)) return;
+  let v = null;
+  try { v = JSON.parse(out); } catch (e) { return; }
+  const files = v && Array.isArray(v.files) ? v.files : [v];
+  for (const f of files) if (f && typeof f.id === 'string' && isNotes(f.title)) ids.add(f.id);
+}
+
+// Whether a tool call writes the notes: its title in the call, or an id known as the notes'.
+function writesNotes(c, ids) {
+  if (!NOTES_WRITE.test(c.name)) return false;
+  const i = c.input || {};
+  return isNotes(i.title) || [i.fileId, i.documentId].some((id) => typeof id === 'string' && ids.has(id));
+}
+
+function isWork(c, command) {
+  if (WORK_TOOLS.has(c.name) || WORK_TRIGGER.test(c.name) || WORK_COMMAND.test(command)) return true;
+  return c.name === 'Artifact' && ARTIFACT_WRITES.has(c.input ? c.input.action : undefined);
+}
+
+// { tied, project, key, work }: whether the chat wrote its project folder, the page it saved last (null: none), the
+// key of its last folder write's result and the work done since that write.
 function scan(lines) {
-  const state = { project: null, key: null, work: 0 };
-  const pending = {}; // tool_use id -> { verb, name }: a save, new or delete waiting for its result
+  const state = { tied: false, project: null, key: null, work: 0 };
+  const notesIds = new Set();
+  // tool_use id -> { verb, name }: a page save, new or delete, or a notes write ('notes'), waiting for its result;
+  // mcp: a connector call, whose result may give the notes' id
+  const pending = {};
   for (const line of lines) {
     const e = parse(line);
     if (!e || e.isSidechain || !e.message || !Array.isArray(e.message.content)) continue;
@@ -85,12 +124,17 @@ function scan(lines) {
         delete pending[c.tool_use_id];
         if (c.is_error) continue;
         const out = textOf(c.content);
+        if (call.mcp) learnNotes(out, notesIds);
+        const key = String(e.uuid || c.tool_use_id);
+        const wrote = (project) => Object.assign(state, { tied: true, project, key, work: 0 });
         if (call.verb === 'delete') {
           if (/\bDELETED\b/.test(out) && state.project === call.name) {
-            Object.assign(state, { project: null, key: null, work: 0 });
+            Object.assign(state, { tied: false, project: null, key: null, work: 0 });
           }
-        } else if (/\bSAVED\b/.test(out)) {
-          Object.assign(state, { project: call.name, key: String(e.uuid || c.tool_use_id), work: 0 });
+        } else if (call.verb === 'notes') {
+          wrote(state.project);
+        } else if (call.verb && /\bSAVED\b/.test(out)) {
+          wrote(call.name);
         }
       }
     } else if (e.type === 'assistant') {
@@ -99,23 +143,26 @@ function scan(lines) {
         const command = c.input && typeof c.input.command === 'string' ? c.input.command : '';
         const calls = [...command.matchAll(STATUS_CALL)];
         if (calls.length) {
-          // a read alone ties nothing: only a save (or a new page) that succeeded does
+          // a read alone writes nothing: only a save (or a new page) that succeeded does
           for (const call of calls) if (call[1] !== 'read') pending[c.id] = { verb: call[1], name: call[2] };
           continue;
         }
-        if (WORK_TOOLS.has(c.name) || WORK_COMMAND.test(command)) state.work++;
+        const mcp = typeof c.name === 'string' && c.name.startsWith('mcp__');
+        if (writesNotes(c, notesIds)) pending[c.id] = { verb: 'notes', mcp };
+        else if (mcp) pending[c.id] = { mcp };
+        if (isWork(c, command)) state.work++;
       }
     }
   }
   return state;
 }
 
-function note(name) {
-  return `Status note: the page ${name} was saved before later changes. Save it again if its State, Done when or Next ` +
-    `step changed (node ${STATUS_JS} read ${name}, edit, save with its BASE); otherwise finish.`;
+function note() {
+  return 'Stop check: things changed since the project folder was last written. Write the project notes ' +
+    '(and save the page if State or Next step changed) before ending.';
 }
 
-// ---- At most once per chat. ----
+// ---- Once per unsaved stretch. ----
 
 function kebab(s) {
   return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
@@ -135,16 +182,20 @@ function prune(stateDir) {
 function decide(input, stateDir) {
   const dir = stateDir || STATE_DIR;
   if (!input || !input.session_id || !input.transcript_path || input.stop_hook_active) return '';
-  const file = path.join(dir, kebab(input.session_id) + STATE_SUFFIX);
-  if (fs.existsSync(file)) return ''; // refused once already: never again in this chat
   const raw = readTranscript(input.transcript_path);
   if (!raw) return '';
   const state = scan(raw.split('\n'));
-  if (!state.project || state.work === 0) return '';
+  if (!state.tied || state.work === 0) return '';
+  const file = path.join(dir, kebab(input.session_id) + STATE_SUFFIX);
+  if (fs.existsSync(file)) {
+    let kept = null;
+    try { kept = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (e) { return ''; } // unreadable: never block
+    if (!kept || kept.noted === state.key) return ''; // refused once already in this stretch
+  }
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(file, JSON.stringify({ noted: state.key, project: state.project }));
   prune(dir);
-  return note(state.project);
+  return note();
 }
 
 if (require.main === module) {
