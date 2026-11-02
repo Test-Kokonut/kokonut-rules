@@ -84,9 +84,10 @@ bash /tmp/kokonut-setup.sh
   model, effort and repo: its first prompt `/effort <the old chat's effort>`) sent the 5-question quiz and the 3
   latest questions George asked the old chat (his words); the answer key, the old chat's own answers and the verdict
   in the Doc `handover-quiz` in that folder; one more round for missed points only; a check that the new chat's model
-  and effort match. Then George's only message: "👉 **New chat ready: <link>**", each of his questions with the old
+  and effort match, all waited for inside one helper so George sees no progress lines. Then George's only message:
+  "👉 **Hand-over ready: the new chat knows this project**", the new chat's link, each of his questions with the old
   chat's answer ("Here:") and the new chat's ("New:"), one ⚠️ line only when model or effort differ or a quiz point
-  stays missed, then "Continue there?". No quiz, rounds or doc links in it. George types `continue <name>` in the new
+  stays missed, then "Continue there?" and how to switch. No quiz, rounds or doc links in it. George types `continue <name>` in the new
   chat to move. Until then the new chat only reads and answers.
 - George's messages: only one with `origin.kind` "human" counts as his (reminder.js `fromGeorge`). A message with no
   origin never does, so a chat started by another chat cannot take that chat's messages for George's "rule change ok".

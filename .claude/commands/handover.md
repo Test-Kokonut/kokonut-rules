@@ -69,11 +69,15 @@ connectors (in some chats their tools have other names).
    `handover-quiz` in the same folder: for questions 1 to 5, 3 to 8 must-have points each (a name, number, command or
    quote) from the page and the notes; for questions 6 to 8, this chat's own answer, one line of at most 10 words, as
    it would answer George now. A point or an answer the notes lack goes into the notes first.
-6. Wait, silently. get_session on the new chat about every 20 s (between checks: Bash `sleep 20` with
-   run_in_background; you are woken when it ends) until its status_bucket is no longer "working"; at most 5 minutes.
-   Read its answer: list_events with kinds ["result"] (else ["assistant"]), the newest. Check its
-   session_context.model, configured_model and external_metadata.last_served_model against this chat's model, and its
-   session_context.effort_level (else external_metadata.effort_level) against this chat's effort.
+6. Wait, silently, inside one helper. Each wake-up of this chat ends with a line George sees (that is where "Still
+   running" came from), so this chat does not wait itself: call Agent once, run_in_background false, with a brief
+   that does steps 6 to 8 and returns the judged result (verdicts, misses, the new chat's answers to questions 6 to 8,
+   its model and effort); this chat writes nothing while it runs. The helper: get_session on the new chat about every
+   20 s (between checks: Bash `sleep 20` with run_in_background; the helper is woken, not George) until its
+   status_bucket is no longer "working"; at most 5 minutes. Read its answer: list_events with kinds ["result"] (else
+   ["assistant"]), the newest. Check its session_context.model, configured_model and external_metadata.last_served_model
+   against this chat's model, and its session_context.effort_level (else external_metadata.effort_level) against this
+   chat's effort.
 7. Judge. Questions 1 to 5: each key point is hit (stated and specific), miss (absent, or "not in notes") or wrong
    (contradicts). Questions 6 to 8: the new answer is a hit when it agrees with this chat's, a miss when it leaves out
    its point, wrong when it contradicts it. A line with no source counts as wrong. A question passes when every point
@@ -85,13 +89,16 @@ connectors (in some chats their tools have other names).
    goes to George (step 9).
 9. Tell George, one message (rules 11 and 22), exactly this shape:
    ```
-   👉 **New chat ready: <link>**
+   👉 **Hand-over ready: the new chat knows this project**
+
+   New chat: <link>
+   Your past questions, this chat's answer, then the new chat's:
 
    <George's question, word for word>
    - Here: <this chat's answer, one line (step 5)>
    - New: <the new chat's latest answer, one line, without its source>
 
-   Continue there?
+   Continue there? Type `continue <name>` in the new chat, or say no to stay here.
    ```
    The question and its two lines repeat for each of his questions, a blank line between them. One ⚠️ line goes just
    before `Continue there?`, only when the new chat's model or effort differ (step 6: both values, and George's one
