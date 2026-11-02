@@ -13,22 +13,21 @@
 //         in the call (create_file, update_file), or its id (fileId, documentId) where an earlier connector result
 //         (search_files, get_file_metadata, create_file) gave that id with the title notes; a call that failed is
 //         none;
-//     the chat's first folder write ties it to its project; a delete of its page (status.js delete <name>, DELETED)
-//     unties it; a chat never tied is never refused;
+//     a chat that never wrote its folder counts its work from its start;
 //   - work is an Edit, Write, MultiEdit, NotebookEdit, Agent, Task or Workflow call, an artifact publish or delete
 //     (Artifact), a scheduled task created, changed or deleted (create_trigger, update_trigger, delete_trigger), or a
 //     command with git commit, push or merge, a gcloud deploy, update, create, delete or execute, or bq query, rm, mk
 //     or load; a command that calls status.js is not work.
-// When a tied chat has work after its last folder write, the stop is refused with one line: "Stop check: things
-// changed since the project folder was last written. Write the project notes (and save the page if State or Next step
-// changed) before ending."
+// When a chat has work after its last folder write (or, never written, any work), the stop is refused with one line:
+// "Stop check: things changed since the project folder was last written. Write the project notes (and save the page
+// if State or Next step changed) before ending."
 // Once per unsaved stretch: its state file, ~/.claude/status-state/<session id>.check.json, holds the last folder
-// write the chat was refused after, and is written before the stop is refused. A stop after that write is never
-// refused again, however much more work; a folder write after it starts a new stretch, and new work after that write
-// is refused again. A stop that Claude Code already marks as continued by a Stop hook (stop_hook_active) is never
-// refused, and a helper's turns (isSidechain) count for nothing. State files older than 30 days are removed. A
-// transcript over 20 MB is read from its last 2 MB only: a folder write before that is not seen (nor a notes id
-// given before that), and the chat counts as untied.
+// write the chat was refused after (null: none yet), and is written before the stop is refused. A stop after that
+// write is never refused again, however much more work; a folder write after it starts a new stretch, and new work
+// after that write is refused again. A chat with no work is never refused. A stop that Claude Code already marks as
+// continued by a Stop hook (stop_hook_active) is never refused, and a helper's turns (isSidechain) count for
+// nothing. State files older than 30 days are removed. A transcript over 20 MB is read from its last 2 MB only: a
+// folder write before that is not seen (nor a notes id given before that), and the chat counts its work from there.
 // Node only, no packages, Windows and Linux. An error never blocks: it prints nothing and always exits 0.
 'use strict';
 const fs = require('fs');
@@ -106,13 +105,13 @@ function isWork(c, command) {
   return c.name === 'Artifact' && ARTIFACT_WRITES.has(c.input ? c.input.action : undefined);
 }
 
-// { tied, project, key, work }: whether the chat wrote its project folder, the page it saved last (null: none), the
-// key of its last folder write's result and the work done since that write.
+// { project, key, work }: the page the chat saved last (null: none), the key of its last folder write's result (null:
+// never written) and the work done since that write (since the start, never written).
 function scan(lines) {
-  const state = { tied: false, project: null, key: null, work: 0 };
+  const state = { project: null, key: null, work: 0 };
   const notesIds = new Set();
-  // tool_use id -> { verb, name }: a page save, new or delete, or a notes write ('notes'), waiting for its result;
-  // mcp: a connector call, whose result may give the notes' id
+  // tool_use id -> { verb, name }: a page save or new, or a notes write ('notes'), waiting for its result; mcp: a
+  // connector call, whose result may give the notes' id
   const pending = {};
   for (const line of lines) {
     const e = parse(line);
@@ -126,16 +125,8 @@ function scan(lines) {
         const out = textOf(c.content);
         if (call.mcp) learnNotes(out, notesIds);
         const key = String(e.uuid || c.tool_use_id);
-        const wrote = (project) => Object.assign(state, { tied: true, project, key, work: 0 });
-        if (call.verb === 'delete') {
-          if (/\bDELETED\b/.test(out) && state.project === call.name) {
-            Object.assign(state, { tied: false, project: null, key: null, work: 0 });
-          }
-        } else if (call.verb === 'notes') {
-          wrote(state.project);
-        } else if (call.verb && /\bSAVED\b/.test(out)) {
-          wrote(call.name);
-        }
+        if (call.verb === 'notes') Object.assign(state, { key, work: 0 });
+        else if (call.verb && /\bSAVED\b/.test(out)) Object.assign(state, { project: call.name, key, work: 0 });
       }
     } else if (e.type === 'assistant') {
       for (const c of e.message.content) {
@@ -143,8 +134,10 @@ function scan(lines) {
         const command = c.input && typeof c.input.command === 'string' ? c.input.command : '';
         const calls = [...command.matchAll(STATUS_CALL)];
         if (calls.length) {
-          // a read alone writes nothing: only a save (or a new page) that succeeded does
-          for (const call of calls) if (call[1] !== 'read') pending[c.id] = { verb: call[1], name: call[2] };
+          // a read or a delete writes nothing: only a save (or a new page) that succeeded does
+          for (const call of calls) {
+            if (call[1] === 'save' || call[1] === 'new') pending[c.id] = { verb: call[1], name: call[2] };
+          }
           continue;
         }
         const mcp = typeof c.name === 'string' && c.name.startsWith('mcp__');
@@ -185,12 +178,13 @@ function decide(input, stateDir) {
   const raw = readTranscript(input.transcript_path);
   if (!raw) return '';
   const state = scan(raw.split('\n'));
-  if (!state.tied || state.work === 0) return '';
+  if (state.work === 0) return '';
   const file = path.join(dir, kebab(input.session_id) + STATE_SUFFIX);
   if (fs.existsSync(file)) {
     let kept = null;
     try { kept = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (e) { return ''; } // unreadable: never block
-    if (!kept || kept.noted === state.key) return ''; // refused once already in this stretch
+    // refused once already in this stretch (a chat never written: null, both)
+    if (!kept || kept.noted === state.key) return '';
   }
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(file, JSON.stringify({ noted: state.key, project: state.project }));

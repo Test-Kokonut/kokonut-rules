@@ -75,12 +75,11 @@ bash /tmp/kokonut-setup.sh
   `notes`, named by its title or by its id).
 - Work: edits, writes, helpers, commits, pushes, merges, artifact publishes, scheduled-task changes, deploys and
   other gcloud or bq changes.
-- At the end of a turn with work since the last folder write (`status-check.js`, the Stop hook), the stop is refused
-  once, with one line: "Stop check: things changed since the project folder was last written. Write the project
-  notes (and save the page if State or Next step changed) before ending." The next stop passes, however much more
-  work; new work after a folder write is refused again.
-- Never refused: a chat that never wrote its folder, a stop already continued by a Stop hook, a helper. An error
-  never blocks.
+- At the end of a turn with work since the last folder write, or with any work in a chat that never wrote its folder
+  (`status-check.js`, the Stop hook), the stop is refused once, with one line: "Stop check: things changed since the
+  project folder was last written. Write the project notes (and save the page if State or Next step changed) before
+  ending." The next stop passes, however much more work; new work after a folder write is refused again.
+- Never refused: a chat with no work, a stop already continued by a Stop hook, a helper. An error never blocks.
 
 ## The hand-over (rule 22)
 - Why: a chat compacts (summarises its own past) at about 784,000 tokens of context and loses detail. Before that, it
