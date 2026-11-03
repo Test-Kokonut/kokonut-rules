@@ -61,7 +61,8 @@ connectors (in some chats their tools have other names).
    7. <his 2nd question, word for word>
    8. <his 3rd question, word for word>
    Answer only from the page and the notes. Cite the source of each line (page or notes, and the part). Say "not in
-   notes" where they are silent.
+   notes" where they are silent. Answer here, in your reply: never send a message to the old chat (each one wakes it,
+   and George sees a line); it reads your reply itself.
    ```
    It cannot be started (no tool, refused): step 9's message is instead `⚠️ **No new chat**`, the reason and the
    notes' link.
@@ -85,8 +86,8 @@ connectors (in some chats their tools have other names).
    misses, both answers to questions 6 to 8, model and effort.
 8. A second round, only for misses. Add or move each missed fact in the notes, rewrite each line that misled, then
    mcp__claude-code-remote__send_message to the new chat: `Notes changed <time> UTC (parts <X, Y>). Read them again;
-   answer questions <N, M> again, same format.` Wait and judge as in steps 6 and 7. No third round: what still fails
-   goes to George (step 9).
+   answer questions <N, M> again, same format, here in your reply; send no message back.` Wait and judge as in steps
+   6 and 7. No third round: what still fails goes to George (step 9).
 9. Tell George, one message (rules 11 and 22), exactly this shape:
    ```
    👉 **Hand-over ready: the new chat knows this project**
