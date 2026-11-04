@@ -19,7 +19,7 @@ downloads it with no login.
   push to main) and `guard.js` (no Upwork API or login, no key in a commit). What each does is written at the top of
   its file.
 - `.claude/commands/`: the slash commands. `continue.md`: `/continue <name>` reads the project's page and notes and
-  tells George 3 lines (what it is for, where it stands, the next step), then works; a new project starts work at
+  tells George one line (the next step), then works; a new project starts work at
   once and gets its page and Drive folder when there is something to keep. `handover.md`: `/handover` hands the
   project over to a new chat (below).
 - `setup.sh`: the installer, below.
