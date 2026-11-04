@@ -97,7 +97,8 @@ test('after the sign-in, where things are, after a blank line; no project list',
   const g = fakeGcloud('');
   const parts = start({ env: { KOKONUT_READER_KEY: KEY }, run: g.run, home: base });
   assert.deepStrictEqual(parts, [SIGNED_IN, WHERE]);
-  assert.match(WHERE, /^Where things are:\n- Repo map: REPOS\.md in kokonut-temp\.\n[\s\S]*https:\/\/drive\.google\.com\/drive\/folders\/1O-b-xz-JTbHesM9S5GdB3OpecQZoJQjy\n- Rules: kokonut-rules/);
+  assert.match(WHERE, /^Where things are:\n- Repo map: REPOS\.md in kokonut-temp\.\n- Reading live data: [\s\S]*\n- Rules: kokonut-rules \(CLAUDE\.md, hooks, setup\.sh\)\.$/);
+  assert.ok(!WHERE.includes('Drive') && !WHERE.includes('Projects') && !WHERE.includes('/continue'), 'no pages, folders or commands in the note');
 });
 
 test('as a hook in a cloud session without a key: where things are, only', () => {

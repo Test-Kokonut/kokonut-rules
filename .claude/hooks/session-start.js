@@ -9,7 +9,7 @@
 //       gcloud auth activate-service-account --key-file=<that file> --quiet and
 //       gcloud config set project kokonut-data-base --quiet. With an account already there, nothing is done.
 //   "Where things are:" and a few lines (WHERE below): the repo map, the projects and their status tool, reading live
-//       data, the Drive folder "Bots - work in progress", the rules. Always printed.
+//       data, the rules. Always printed.
 // A part that fails is left out alone. Every gcloud call runs without CLOUDSDK_AUTH_ACCESS_TOKEN: the cloud session
 // sets a placeholder token there that would win over the key. The chat's own shell gets the same: when that variable
 // is set and Claude Code names its environment file (CLAUDE_ENV_FILE, run as shell code before each Bash command), one
@@ -29,10 +29,8 @@ const SIGNED_IN = 'Signed in as the reader identity.';
 const WHERE = [
   'Where things are:',
   '- Repo map: REPOS.md in kokonut-temp.',
-  '- Projects: kokonut-status projects/<name>.md, read and saved only with its scripts/status.js.',
   '- Reading live data: kokonut-upwork-sync shared/README.md.',
-  '- Drive: "Bots - work in progress", https://drive.google.com/drive/folders/1O-b-xz-JTbHesM9S5GdB3OpecQZoJQjy',
-  '- Rules: kokonut-rules (CLAUDE.md, hooks, setup.sh, /continue, /handover).',
+  '- Rules: kokonut-rules (CLAUDE.md, hooks, setup.sh).',
 ].join('\n');
 // The environment gcloud runs in: this one without the placeholder token.
 function gcloudEnv(env) {

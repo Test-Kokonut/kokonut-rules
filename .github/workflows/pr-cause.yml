@@ -2,13 +2,17 @@ name: pr-cause
 # When a pull request is opened, edited or gets new commits: fails unless its description has a "Cause:" line and a
 # "Fix:" line, each with text after the colon (any case; a list marker or bold around the word is fine). The same
 # reading as kokonut-temp's checks/pr-cause.js (its found()), written out here: this repo is public, and a public repo
-# cannot use kokonut-temp's private actions. Editing the description runs it again. The job keeps its name, cause:
-# main's ruleset requires that check.
+# cannot use kokonut-temp's private actions. Then, when the pull request changes CLAUDE.md (the rulebook): fails
+# unless the description quotes every line the change removes and every line it adds (each line's text, spaces
+# collapsed, case ignored; headings and blank lines are not asked for), so George reads the whole rule change in the
+# description before he merges. Editing the description runs it again. The job keeps its name, cause: main's
+# ruleset requires that check.
 on:
   pull_request:
     types: [opened, edited, synchronize]
 permissions:
   contents: read
+  pull-requests: read
 jobs:
   cause:
     runs-on: ubuntu-latest
@@ -34,4 +38,44 @@ jobs:
             process.exit(1);
           }
           console.log('pr-cause: Cause and Fix present.');
+          JS
+      - name: A rule change quotes every old and new line of CLAUDE.md
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node - <<'JS'
+          const fs = require('fs');
+          const event = JSON.parse(fs.readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'));
+          const pr = event.pull_request;
+          const repo = event.repository.full_name;
+          const norm = (s) => s.replace(/^\s*(?:\d+\.\s+)?/, '').replace(/\s+/g, ' ').trim().toLowerCase();
+          const skip = (s) => !s.trim() || /^#/.test(s.trim());
+          (async () => {
+            const files = [];
+            for (let page = 1; page <= 5; page++) {
+              const r = await fetch(`https://api.github.com/repos/${repo}/pulls/${pr.number}/files?per_page=100&page=${page}`, {
+                headers: { Authorization: `Bearer ${process.env.GH_TOKEN}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
+              });
+              if (!r.ok) throw new Error(`pr-cause: GitHub answered ${r.status} for the pull request's files.`);
+              const part = await r.json();
+              files.push(...part);
+              if (part.length < 100) break;
+            }
+            const rulebook = files.find((f) => f.filename === 'CLAUDE.md');
+            if (!rulebook) { console.log('pr-cause: CLAUDE.md unchanged, nothing to quote.'); return; }
+            const body = norm(String(pr.body || ''));
+            const missing = { removed: [], added: [] };
+            for (const line of String(rulebook.patch || '').split('\n')) {
+              if (/^(\+\+\+|---|@@)/.test(line)) continue;
+              const text = line.slice(1);
+              if (skip(text)) continue;
+              if (line[0] === '-' && !body.includes(norm(text))) missing.removed.push(text.trim());
+              if (line[0] === '+' && !body.includes(norm(text))) missing.added.push(text.trim());
+            }
+            if (!missing.removed.length && !missing.added.length) { console.log('pr-cause: every old and new rulebook line is quoted.'); return; }
+            console.log('pr-cause: the pull request changes CLAUDE.md; its description must quote every line removed and added, so George reads the rule change before he merges. Missing:');
+            for (const l of missing.removed) console.log(`  removed, not quoted: ${l}`);
+            for (const l of missing.added) console.log(`  added, not quoted: ${l}`);
+            process.exit(1);
+          })().catch((e) => { console.log(String(e.message || e)); process.exit(1); });
           JS
