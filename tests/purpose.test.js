@@ -37,6 +37,25 @@ test('not pinned: every message of George gets the one line that says what pins 
   assert.ok(!fs.existsSync(pinFile(dir)));
 });
 
+test('nothing pinned: the last reply with Purpose and Done when is pinned at his next message, whatever it says', () => {
+  const dir = scratch();
+  const file = transcript(dir, [george('fix the alerts'), reply(PROPOSAL)]);
+  const out = check({ hook_event_name: 'UserPromptSubmit', prompt: 'and the second alert?', transcript_path: file }, { home: dir });
+  assert.strictEqual(out, 'Pinned now:\n' + PINNED.trim());
+  assert.strictEqual(fs.readFileSync(pinFile(dir), 'utf8'), PINNED);
+});
+
+test('pinned: a reply with new lines pins again only on his yes', () => {
+  const dir = scratch();
+  fs.mkdirSync(path.dirname(pinFile(dir)), { recursive: true });
+  fs.writeFileSync(pinFile(dir), 'Purpose: old\nDone when:\n- old\n');
+  const file = transcript(dir, [reply('Purpose: new\nDone when: new check')]);
+  check({ hook_event_name: 'UserPromptSubmit', prompt: 'hm, not sure', transcript_path: file }, { home: dir });
+  assert.strictEqual(fs.readFileSync(pinFile(dir), 'utf8'), 'Purpose: old\nDone when:\n- old\n', 'no yes: the old pin stays');
+  check({ hook_event_name: 'UserPromptSubmit', prompt: 'ok', transcript_path: file }, { home: dir });
+  assert.strictEqual(fs.readFileSync(pinFile(dir), 'utf8'), 'Purpose: new\nDone when:\n- new check\n');
+});
+
 test('his ok to a reply with Purpose and Done when pins them; every later message carries them', () => {
   const dir = scratch();
   const file = transcript(dir, [george('fix the alerts'), reply(PROPOSAL)]);

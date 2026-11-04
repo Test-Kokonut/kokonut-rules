@@ -27,7 +27,7 @@ test('no line is longer than 120 characters; a wrapped line goes on indented', (
 test('the rules the hooks enforce are written: the pin (rule 9) and the yes before a shared change (rule 12)', () => {
   assert.match(text, /"Purpose:" and "Done when:"/, 'rule 9 names the two lines purpose.js pins');
   assert.match(text, /"I will: …"/, 'rule 12 names the one line the gate asks for');
-  assert.match(text, /blocked until his yes/, 'rule 12 says the gate blocks');
+  assert.match(text, /The gate blocks it otherwise/, 'rule 12 says the gate blocks');
 });
 
 test('the status icons of rule 1 are the five George chose', () => {

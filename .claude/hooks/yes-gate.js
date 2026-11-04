@@ -11,17 +11,20 @@
 // review; a chat started or archived, a scheduled task made, changed or fired; the Upwork connector; a page
 // deleted; in a shell: rm -r (outside the temp folder), a branch deleted, a force push, gh pr merge, gcloud run
 // deploy and the other Google Cloud writes, bq writes, SQL writes, a status page saved.
-// The yes: transcript.js isYes on George's last message in the chat's transcript (a helper is judged by the chat's
-// transcript, mainTranscript). After his yes, every call in that turn passes: his next message ends it.
-// The pin: purpose.js's file. Without it the refusal says so first.
+// What lets a blocked call pass: George's last message in the chat's transcript (a helper is judged by the chat's
+// transcript, mainTranscript) is a yes (transcript.js isYes), or it names the action with the action's own words
+// (ORDER below: "deploy" for a deploy, "merge" for a merge, "sheet" for a Sheet, ...). A word match, nothing
+// read into his words. After that message, every call in the turn passes: his next message ends it.
+// The pin: purpose.js's file; when nothing is pinned, the chat's last reply with the lines "Purpose:" and
+// "Done when:" is pinned here (purpose.js pinFromReply), so rule 9's first reply can go straight to the work.
+// Without a pin the refusal says so first.
 // Output on a refusal: {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
 // "permissionDecisionReason": <one line>}}. Node only, no packages. Any internal error prints nothing and exits 0.
 'use strict';
-const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { lastGeorgeText, mainTranscript, isYes } = require('./transcript.js');
-const { pinFile } = require('./purpose.js');
+const { pinFromReply } = require('./purpose.js');
 const { words } = require('./no-main.js');
 
 const MCP = [
@@ -55,6 +58,34 @@ const BASH = [
   [['remove-item'], /^remove-item\b/i, 'deleting files'],
 ];
 const SQL_WRITE = /\b(?:INSERT|UPDATE|DELETE|MERGE|CREATE|DROP|ALTER|TRUNCATE)\b/i;
+// The words of George's message that name each blocked action: his order passes the gate when it holds one.
+const ORDER = {
+  'sending mail': /\b(?:mail|email|gmail)\b/i,
+  'binning mail': /\b(?:mail|email|gmail|trash|spam)\b/i,
+  'sending on Slack': /\bslack\b/i,
+  'changing a shared Slack canvas or list': /\b(?:slack|canvas)\b/i,
+  'binning a Drive file': /\b(?:drive|folder|trash)\b/i,
+  'sharing a Drive file': /\bshare\b/i,
+  'changing a Drive file in place': /\bdrive\b/i,
+  'changing a Doc': /\b(?:doc|docs|document)\b/i,
+  'changing a Sheet': /\b(?:sheet|sheets|spreadsheet)\b/i,
+  'changing the calendar': /\b(?:calendar|event|meeting|invite)\b/i,
+  'a GitHub action others see': /\b(?:merge|issue|review|comment|repo|repository)\b/i,
+  'starting or changing a chat or a scheduled task': /\b(?:chat|session|task|schedule|scheduled|trigger|reminder)\b/i,
+  'the Upwork connector': /\bupwork\b/i,
+  'deleting a page': /\b(?:page|artifact|delete)\b/i,
+  'deleting files': /\b(?:delete|remove|clean|wipe)\b/i,
+  'deleting a branch': /\bbranch(?:es)?\b/i,
+  'deleting a branch on GitHub': /\bbranch(?:es)?\b/i,
+  'rewriting a branch on GitHub': /\bforce\b/i,
+  'merging to main': /\bmerge\b/i,
+  'deploying': /\b(?:deploy|release|ship)\b/i,
+  'changing a schedule': /\b(?:schedule|scheduler|job)\b/i,
+  'changing Google Cloud': /\b(?:cloud|gcloud|secret|iam|sql)\b/i,
+  'changing BigQuery': /\b(?:bigquery|bq|table)\b/i,
+  'changing the database': /\b(?:database|db|sql|table)\b/i,
+  'changing a status page': /\b(?:status|page)\b/i,
+};
 // rm -r / rm -rf / rm -fr / rm -r -f as a command word (not inside an echo or a grep): deleting files, unless every
 // path is in the temp folder or node_modules (a chat's own scratch). Each simple command (between && || ; | and
 // line breaks) is read by its command word, past variable assignments, keywords and wrappers (sudo, env, timeout).
@@ -121,16 +152,18 @@ function refused(input, options) {
   if (!input || typeof input !== 'object') return '';
   const label = classify(input.tool_name, input.tool_input);
   if (!label) return '';
+  const main = mainTranscript(input);
   let pinned = false;
-  try { pinned = fs.readFileSync(pinFile(o.home || os.homedir()), 'utf8').trim() !== ''; } catch (e) { pinned = false; }
+  try { pinned = pinFromReply(main, o.home || os.homedir()); } catch (e) { pinned = false; }
   if (!pinned) {
-    return `Blocked (${label}): no Purpose and Done when pinned yet. Reply with the lines "Purpose:" and "Done when:" ` +
-      'in George\'s words and ask ok. Then ask his yes for this step.';
+    return `Blocked (${label}): no Purpose and Done when yet. Reply with the lines "Purpose:" and "Done when:" ` +
+      'in George\'s words first; then this step goes on.';
   }
   let last = '';
-  try { last = lastGeorgeText(mainTranscript(input)); } catch (e) { last = ''; }
+  try { last = lastGeorgeText(main); } catch (e) { last = ''; }
   if (isYes(last)) return '';
-  return `Blocked (${label}): needs George's yes. Reply one line, "I will: <what, where>", and wait for it.`;
+  if (ORDER[label] && !last.includes('?') && ORDER[label].test(last)) return ''; // a question is never an order
+  return `Blocked (${label}): George's last message neither orders it nor says yes. Reply one line, "I will: <what, where>", and wait.`;
 }
 
 if (require.main === module) {
@@ -155,4 +188,4 @@ if (require.main === module) {
   setTimeout(go, 3000);
 }
 
-module.exports = { classify, refused, MCP, BASH };
+module.exports = { classify, refused, MCP, BASH, ORDER };
