@@ -92,12 +92,42 @@ test('shell: reads, commits, pushing the chat\'s own branch, queries, deletes in
   }
 });
 
-test('nothing pinned: a blocked call is refused with the pin line, whatever George said', () => {
+test('nothing pinned and no reply with the lines: a blocked call is refused with the pin line, whatever George said', () => {
   const dir = scratch();
-  const file = transcript(dir, 's.jsonl', [george('yes')]);
+  const file = transcript(dir, 's.jsonl', [george('yes'), reply('✅ Sure.')]);
   const r = refused(Object.assign({ transcript_path: file }, mcp('mcp__Gmail__send_message')), { home: dir });
-  assert.match(r, /^Blocked \(sending mail\): no Purpose and Done when pinned yet\./);
+  assert.match(r, /^Blocked \(sending mail\): no Purpose and Done when yet\./);
+  assert.ok(!fs.existsSync(pinFile(dir)));
   assert.strictEqual(refused(Object.assign({ transcript_path: file }, bash('git status')), { home: dir }), '', 'a read is never refused');
+});
+
+test('nothing pinned, the current reply holds the lines: pinned on the spot, and the call goes on', () => {
+  const dir = scratch();
+  const file = transcript(dir, 's.jsonl', [george('mail Anna the new time'), reply('Purpose: Anna has the new time.\nDone when:\n- the mail is sent')]);
+  assert.strictEqual(refused(Object.assign({ transcript_path: file }, mcp('mcp__Gmail__send_message')), { home: dir }), '');
+  assert.strictEqual(fs.readFileSync(pinFile(dir), 'utf8'), 'Purpose: Anna has the new time.\nDone when:\n- the mail is sent\n');
+});
+
+test("pinned, George's order names the action: the call passes; an order for something else: refused", () => {
+  const dir = scratch();
+  pin(dir);
+  const cases = [
+    ['deploy the api now', bash('gcloud run deploy api'), true],
+    ['set up the scheduled task for 07:40', mcp('mcp__claude-code-remote__create_trigger'), true],
+    ['merge it', mcp('mcp__github__merge_pull_request'), true],
+    ['Remove the hand-over entirely', mcp('mcp__github__merge_pull_request'), false],
+    ['send me the list', mcp('mcp__Slack__slack_send_message'), false],
+    ['update the sheet with the October numbers', mcp('mcp__Google_Sheets__update_values'), true],
+    ['update the numbers', mcp('mcp__Google_Sheets__update_values'), false],
+    ['delete the old branches', bash('git push origin --delete old'), true],
+    ['clean the build folder', bash('rm -rf build'), true],
+    ['what is in the build folder?', bash('rm -rf build'), false],
+  ];
+  for (const [said, call, passes] of cases) {
+    const file = transcript(dir, 'o.jsonl', [george(said)]);
+    const r = refused(Object.assign({ transcript_path: file }, call), { home: dir });
+    assert.strictEqual(r === '', passes, `${said} -> ${call.tool_name}: ${r || 'passes'}`);
+  }
 });
 
 test("pinned, George's last message a yes: the call passes; not a yes: refused with the ask line", () => {
@@ -107,9 +137,9 @@ test("pinned, George's last message a yes: the call passes; not a yes: refused w
   assert.strictEqual(refused(Object.assign({ transcript_path: yes }, bash('gcloud run deploy api')), { home: dir }), '');
   const no = transcript(dir, 'no.jsonl', [george('yes'), reply('✅ Deployed.'), george('now delete the old branch too?')]);
   const r = refused(Object.assign({ transcript_path: no }, bash('git push origin --delete old')), { home: dir });
-  assert.strictEqual(r, 'Blocked (deleting a branch on GitHub): needs George\'s yes. Reply one line, "I will: <what, where>", and wait for it.');
+  assert.strictEqual(r, 'Blocked (deleting a branch on GitHub): George\'s last message neither orders it nor says yes. Reply one line, "I will: <what, where>", and wait.');
   const order = transcript(dir, 'order.jsonl', [george('Remove the hand-over entirely')]);
-  assert.match(refused(Object.assign({ transcript_path: order }, mcp('mcp__github__merge_pull_request')), { home: dir }), /needs George's yes/);
+  assert.match(refused(Object.assign({ transcript_path: order }, mcp('mcp__github__merge_pull_request')), { home: dir }), /neither orders it nor says yes/);
 });
 
 test("a helper is judged by the chat's transcript: George's yes there lets its blocked call pass", () => {
@@ -120,7 +150,7 @@ test("a helper is judged by the chat's transcript: George's yes there lets its b
   const input = Object.assign({ transcript_path: helper, agent_id: 'a2', session_id: 'sess-1' }, bash('gcloud run deploy api'));
   assert.strictEqual(refused(input, { home: dir }), '');
   transcript(dir, 'sess-1.jsonl', [george('go'), reply('done'), george('what did it cost?')]);
-  assert.match(refused(input, { home: dir }), /needs George's yes/);
+  assert.match(refused(input, { home: dir }), /neither orders it nor says yes/);
 });
 
 test('as the hook: a refusal is a deny decision with the reason; a pass prints nothing; bad input prints nothing', () => {

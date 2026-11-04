@@ -3,10 +3,11 @@
 // when he says ok to them (rule 9 of the rulebook).
 // Written in kokonut-rules, run by the UserPromptSubmit hook in .claude/settings.json, installed machine-wide in a
 // cloud chat by kokonut-rules' setup.sh. Inside a helper (agent_id in its input) it prints nothing.
-// The pin: ~/.claude/kokonut-purpose.md (one chat per machine in the cloud). It is written when George's message is
-// a yes (transcript.js isYes) and the chat's last reply holds a line "Purpose: ..." and a line "Done when: ..."
-// (the latter's text, or the list items under it, up to 8). A later reply with both lines and another yes pins
-// again, so the purpose can change on his ok.
+// The pin: ~/.claude/kokonut-purpose.md (one chat per machine in the cloud). While nothing is pinned, the chat's last
+// reply holding a line "Purpose: ..." and a line "Done when: ..." (the latter's text, or the list items under it,
+// up to 8) is pinned at George's next message, whatever it says: rule 9 states them and goes on; he corrects them
+// if wrong. Once pinned, a later reply with both lines pins again only when his message is a yes (transcript.js
+// isYes), so the purpose changes on his ok. yes-gate.js pins the same way before a gated call in the first turn.
 // What it prints, on stdout, as context for the chat (never for George):
 //   just pinned:  "Pinned now:" and the pinned lines;
 //   pinned:       "Pinned (keep to it, never repeat it to George):" and the pinned lines;
@@ -20,8 +21,8 @@ const path = require('path');
 const { lastAssistantText, isYes } = require('./transcript.js');
 
 const PIN_FILE = path.join('.claude', 'kokonut-purpose.md');
-const NOT_PINNED = 'No Purpose and Done when pinned. Before the first change: a reply with the lines "Purpose:" and ' +
-  '"Done when:" in George\'s words, then his ok pins them. A question needs none.';
+const NOT_PINNED = 'No Purpose and Done when pinned. The first reply on a job holds the lines "Purpose:" and ' +
+  '"Done when:" in George\'s words, then the work starts. A question needs none.';
 // The two lines, whatever comes before the word: an icon, a bullet, bold marks ("👉 **Purpose:** ...").
 const PURPOSE = /^[^A-Za-z0-9]*Purpose\**\s*:\**\s*(.*)$/i;
 const DONE = /^[^A-Za-z0-9]*Done when\**\s*:\**\s*(.*)$/i;
@@ -66,7 +67,9 @@ function check(input, options) {
   if (input.hook_event_name && input.hook_event_name !== 'UserPromptSubmit') return '';
   const file = pinFile(o.home);
   const prompt = typeof input.prompt === 'string' ? input.prompt : '';
-  if (isYes(prompt)) {
+  let had = false;
+  try { had = fs.readFileSync(file, 'utf8').trim() !== ''; } catch (e) { had = false; }
+  if (!had || isYes(prompt)) {
     let pinned = '';
     try { pinned = extract(lastAssistantText(input.transcript_path)); } catch (e) { pinned = ''; }
     if (pinned) {
@@ -104,4 +107,18 @@ if (require.main === module) {
   setTimeout(go, 3000);
 }
 
-module.exports = { check, extract, pinFile, NOT_PINNED, PIN_FILE };
+// Pins the last reply's lines when nothing is pinned yet; true when it did. For yes-gate.js, in the first turn.
+function pinFromReply(transcriptPath, home) {
+  const file = pinFile(home);
+  try { if (fs.readFileSync(file, 'utf8').trim()) return true; } catch (e) { /* nothing pinned */ }
+  let pinned = '';
+  try { pinned = extract(lastAssistantText(transcriptPath)); } catch (e) { pinned = ''; }
+  if (!pinned) return false;
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, pinned);
+    return true;
+  } catch (e) { return false; }
+}
+
+module.exports = { check, extract, pinFile, pinFromReply, NOT_PINNED, PIN_FILE };

@@ -9,7 +9,8 @@
 // George's message: a user entry of the main chat (not isSidechain) whose content is a string or text blocks only
 // (a tool result is not his), and whose text does not start like something the cloud, a hook, a helper or another
 // chat put there (INJECTED below).
-// A yes: his message starts with a yes word (YES below: yes, ok, go, do it, agree, merge it, deploy it, ...), is at
+// A yes: his message starts with a yes word (YES below: yes, ok, go, do it, agree, merge it, deploy it, ...; a bare
+// order like "merge 6" or "send the mail" is not a yes: yes-gate.js reads orders by their own words), is at
 // most 12 words, and the rest of it holds no but, not, no, except, unless, wait, why, what, or a question mark.
 // "go, build it" and "yes - let's move on" are a yes; "done", "yes, but ..." and "ok?" are not.
 // Node only, no packages. Any error in a reader gives null or false, never a throw to the hook.
@@ -21,7 +22,7 @@ const START = 512 * 1024;
 const MAX_READ = 8 * 1024 * 1024;
 const INJECTED = ['<', '[', '{', 'Another Claude session', 'This session is being continued', 'Stop hook feedback',
   'Caveat:', 'KOKONUT ', 'Base directory for this skill', 'SessionStart:', 'Command executed'];
-const YES = /^(?:yes|y|yep|yeah|yup|ok|okay|k|kk|go|go ahead|do it|do that|do so|sure|agree|agreed|fine|proceed|approved|approve|confirm|confirmed|correct|right|merge(?: it| them| both| all)?|send(?: it| them)?|delete(?: it| them| all| both)?|deploy(?: it)?|run it|ship it|build it|rule change ok)$/i;
+const YES = /^(?:yes|y|yep|yeah|yup|ok|okay|k|kk|go|go ahead|do it|do that|do so|sure|agree|agreed|fine|proceed|approved|approve|confirm|confirmed|correct|right|merge (?:it|them|both|all)|send (?:it|them)|delete (?:it|them|all|both)|deploy it|run it|ship it|build it|rule change ok)$/i;
 const NOT_YES = /\b(?:but|not|no|don'?t|except|unless|wait|why|what|how|which)\b|\?/i;
 
 // The last lines of the file, newest last, each parsed as JSON when it is one; null when the file cannot be read.
