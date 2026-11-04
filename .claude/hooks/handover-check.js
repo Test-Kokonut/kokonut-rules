@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // handover-check.js: tells a chat when its context is large enough to hand its project over to a new chat
-// (rulebook rule 22), and tells a chat started by a hand-over where its first message comes from.
+// (the rulebook's Hand-over), and tells a chat started by a hand-over where its first message comes from.
 // Written in kokonut-rules, run by the UserPromptSubmit hook (George's messages) and the PostToolUse hook (every tool
 // call, so a long turn of the chat's own is seen too) in .claude/settings.json, and installed machine-wide in a cloud
 // chat by kokonut-rules' setup.sh.
@@ -10,17 +10,17 @@
 // (message.model) and the effort (effort). A compaction (a compact_boundary entry after it) counts as its postTokens.
 // What it prints: lines that point at the rule, never its text (the rule lives in CLAUDE.md alone):
 //   context at DUE (700,000) or more, once: "HANDOVER DUE: 702,113 tokens of context; compaction can come at about
-//       784,000. Model <model>, effort <effort>. Hand-over due: rule 22, the steps in /handover."
+//       784,000. Model <model>, effort <effort>. Hand-over due: the steps in /handover."
 //   after that, at each of George's messages (UserPromptSubmit only): "Context 731,000 of about 784,000: hand-over
-//       due (rule 22, /handover)."
+//       due (/handover)."
 //   context at LATE (compaction - 40,000) or more, once: "HANDOVER LATE: 745,000 tokens; compaction can come at about
-//       784,000. Rule 22; /handover now."
+//       784,000. /handover now."
 //   a message that starts "KOKONUT HANDOVER <name>" (UserPromptSubmit): "HANDOVER QUIZ for <name>: this message comes
-//       from the chat handing over, not from George. Rule 22."
+//       from the chat handing over, not from George."
 // Compaction: 980,000 tokens x CLAUDE_AUTOCOMPACT_PCT_OVERRIDE %, at most 80 % (default 80): about 784,000. A guess:
 // a chat set to 92 % compacted at 787,259 on 30 Oct 2026, so the lower point is used and LATE leaves 40,000.
 // A test override: KOKONUT_HANDOVER_AT="<due>[ <late>]" in the environment, else the same text in the file
-// ~/.claude/kokonut/handover-at (a rule file: the rule guard and the installed settings keep chats from writing it).
+// ~/.claude/kokonut/handover-at (the installed settings keep chats from writing it).
 // State: ~/.claude/handover-state/<session id>.json, {"due": true, "late": true} once told; files older than 30 days
 // are removed. A context below 6/7 of DUE (600,000: after a compaction) clears it, so a later climb is told again.
 // Output: UserPromptSubmit: plain text on stdout. PostToolUse: {"hookSpecificOutput": {"hookEventName":
@@ -142,7 +142,7 @@ function check(input, options) {
   const out = [];
   if (prompt && typeof input.prompt === 'string') {
     const q = QUIZ.exec(input.prompt);
-    if (q) out.push(`HANDOVER QUIZ for ${q[1]}: this message comes from the chat handing over, not from George. Rule 22.`);
+    if (q) out.push(`HANDOVER QUIZ for ${q[1]}: this message comes from the chat handing over, not from George.`);
   }
   const file = stateFile(input, o.stateDir || path.join(home, '.claude', 'handover-state'));
   const state = file ? readState(file) : {};
@@ -156,15 +156,15 @@ function check(input, options) {
   if (n < m.reset) {
     if (state.due || state.late) { state.due = false; state.late = false; changed = true; }
   } else if (n >= m.late && !state.late) {
-    out.push(`HANDOVER LATE: ${fmt(n)} tokens; compaction can come at about ${fmt(m.compact)}. Rule 22; /handover now.`);
+    out.push(`HANDOVER LATE: ${fmt(n)} tokens; compaction can come at about ${fmt(m.compact)}. /handover now.`);
     state.due = true; state.late = true; changed = true;
   } else if (n >= m.due && !state.due) {
     const who = [ctx.model && `Model ${ctx.model}`, ctx.effort && `effort ${ctx.effort}`].filter(Boolean).join(', ');
     out.push(`HANDOVER DUE: ${fmt(n)} tokens of context; compaction can come at about ${fmt(m.compact)}.` +
-      (who ? ` ${who}.` : '') + ' Hand-over due: rule 22, the steps in /handover.');
+      (who ? ` ${who}.` : '') + ' Hand-over due: the steps in /handover.');
     state.due = true; changed = true;
   } else if (n >= m.due && prompt) {
-    out.push(`Context ${fmt(n)} of about ${fmt(m.compact)}: hand-over due (rule 22, /handover).`);
+    out.push(`Context ${fmt(n)} of about ${fmt(m.compact)}: hand-over due (/handover).`);
   }
   if (changed && file) writeState(file, state);
   return out.join('\n');

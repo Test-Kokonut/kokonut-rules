@@ -10,7 +10,7 @@ const path = require('path');
 const ROOT = path.resolve(__dirname, '..');
 const made = [];
 
-// The hooks also read the cloud's clones in /home/user (reminder.js, repoFile): in the tests, a folder that does not
+// The hooks also read the cloud's clones in /home/user (once reminder.js; kept so a test never reads real clones): in the tests, a folder that does not
 // exist, so a test sees only the files it makes (the hooks it starts inherit this).
 process.env.KOKONUT_REPOS_DIR = path.join(os.tmpdir(), `kokonut-tests-no-repos-${process.pid}`);
 
