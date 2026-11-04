@@ -13,17 +13,16 @@ downloads it with no login.
   ran at medium (30 Oct 2026). The effort of a chat George starts is his app's choice; a hand-over copies the old
   chat's effort (the new chat's first prompt is `/effort <level>`). George changes either per chat (/model, /effort).
   The installer turns it into the machine-wide /root/.claude/settings.json.
-- `.claude/hooks/`: the hooks. `session-start.js` (the reader identity, then the start note: where things are and the
-  open projects, one line each), `reminder.js` (the reply rules before every message), `status-check.js` (the stop
-  check, below), `handover-check.js` (the hand-over, below), `no-main.js` (no push to main), `guard.js` (no Upwork API
-  or login, no key in a commit) and `rule-guard.js` (rule files change only after George types "rule change ok").
-  What each does is written at the top of its file.
-- `.claude/commands/`: the slash commands. `continue.md`: `/continue <name>` takes a project over, or starts it: its
-  status page's brief (Folder, Chat, Purpose, Done when, State, Next step), its working notes in its Drive folder,
-  and the page's Chat line set to this chat; a new project settles Purpose and Done when with George first, then gets
-  its Drive folder and its page. `handover.md`: `/handover` hands the project over to a new chat (below).
-- `setup.sh`: the installer, below. A rule file, as CLAUDE.md and .claude/ are: the rule guard refuses a change to it
-  without George's "rule change ok".
+- `.claude/hooks/`: four hooks, kept few on purpose (4 Nov 2026: hooks that fired on every message, tool call and
+  stop made chats slow and made them talk about the machinery). `session-start.js` (the reader identity, then a short
+  note: where things are), `handover-check.js` (the hand-over, below, on George's messages only), `no-main.js` (no
+  push to main) and `guard.js` (no Upwork API or login, no key in a commit). What each does is written at the top of
+  its file.
+- `.claude/commands/`: the slash commands. `continue.md`: `/continue <name>` reads the project's page and notes and
+  tells George 3 lines (what it is for, where it stands, the next step), then works; a new project starts work at
+  once and gets its page and Drive folder when there is something to keep. `handover.md`: `/handover` hands the
+  project over to a new chat (below).
+- `setup.sh`: the installer, below.
 - `tests/`, `scripts/changed-tests.js`, `package.json`: the hooks' and settings' tests (`npm test` runs them all) and
   the picker of the tests a change calls for.
 - `.github/workflows/tests.yml` (check: test) runs the tests of what changed on a pull request and on a push to a
@@ -67,25 +66,10 @@ bash /tmp/kokonut-setup.sh
 - Paste the box again only when the box above changes. A change to `setup.sh` itself reaches chats on its own: each run
   hands over to the `setup.sh` it downloaded.
 
-## The stop check
-- Why: the project folder holds what a chat did (the working notes and the status page), so the next chat, or
-  George, picks up from there.
-- A folder write: a status page save (`status.js save` or `new`, its result SAVED), or a write of the `notes` file in
-  the project's Drive folder (a Drive or Docs `create_file`, `update_file` or `update_doc` call on the file titled
-  `notes`, named by its title or by its id).
-- Work: edits, writes, helpers, commits, pushes, merges, artifact publishes, scheduled-task changes, deploys and
-  other gcloud or bq changes.
-- At the end of a turn with work since the last folder write, or with any work in a chat that never wrote its folder
-  (`status-check.js`, the Stop hook), the stop is refused once, with one line: "Stop check: things changed since the
-  project folder was last written. Write the project notes (and save the page if State or Next step changed) before
-  ending." The next stop passes, however much more work; new work after a folder write is refused again.
-- Never refused: a chat with no work, a stop already continued by a Stop hook, a helper. An error never blocks.
-
-## The hand-over (rule 22)
+## The hand-over
 - Why: a chat compacts (summarises its own past) at about 784,000 tokens of context and loses detail. Before that, it
   hands its project to a new chat that starts from the page and the notes.
-- What fires when (`handover-check.js`, on George's messages and after every tool call; it reads only the end of the
-  transcript):
+- What fires when (`handover-check.js`, on George's messages; it reads only the end of the transcript):
   - 700,000 tokens, once: `HANDOVER DUE`, with the model and effort. The chat finishes its step and runs `/handover`.
   - After that, each of George's messages: one line, `Context <n> of about 784,000: hand-over due`.
   - 744,000 tokens (40,000 before compaction may come), once: `HANDOVER LATE`.
@@ -102,16 +86,14 @@ bash /tmp/kokonut-setup.sh
   chat's answer ("Here:") and the new chat's ("New:"), one ⚠️ line only when model or effort differ or a quiz point
   stays missed, then "Continue there?" and how to switch. No quiz, rounds or doc links in it. George types `continue <name>` in the new
   chat to move. Until then the new chat only reads and answers.
-- George's messages: only one with `origin.kind` "human" counts as his (reminder.js `fromGeorge`). A message with no
-  origin never does, so a chat started by another chat cannot take that chat's messages for George's "rule change ok".
 - Test without a 700,000-token chat: `KOKONUT_HANDOVER_AT="<due> <late>"` in the hook's environment, or the same text
-  in /root/.claude/kokonut/handover-at (a rule file: it needs George's "rule change ok"). By hand, on a chat's own
+  in /root/.claude/kokonut/handover-at. By hand, on a chat's own
   transcript: `echo '{"hook_event_name":"UserPromptSubmit","session_id":"t","transcript_path":"<file>"}' |
   HOME=<scratch> KOKONUT_HANDOVER_AT=1000 node .claude/hooks/handover-check.js` prints the `HANDOVER DUE` line.
 
 ## How a rule changes
-1. Only on George's go, typed in the chat as "rule change ok" (the rule guard asks for it before every edit, commit
-   and push of a rule file), and only here, on the chat's own branch.
+1. Only on George's go in the chat, and only here, on the chat's own branch. No chat can change main: no-main.js
+   refuses the push, and main takes only a pull request that George merges.
 2. Its pull request, with its "Cause:" and "Fix:" lines, passes its checks (test, cause) and is merged into main.
 3. Nothing to carry: every chat that starts after the merge installs it.
 
@@ -123,6 +105,6 @@ bash /tmp/kokonut-setup.sh
 ## Undo
 - New chats: paste back the earlier setup script (or empty the box) and Save changes; new chats then start without
   the install.
-- In a running chat, after George's "rule change ok": delete /root/.claude/CLAUDE.md, settings.json, hooks/,
+- In a running chat, on George's go: delete /root/.claude/CLAUDE.md, settings.json, hooks/,
   commands/continue.md, commands/handover.md, handover-state/ and kokonut/ (put kokonut/settings.json.before-kokonut
   back first, if there is one).

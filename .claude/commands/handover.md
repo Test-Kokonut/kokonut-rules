@@ -1,8 +1,8 @@
 ---
-description: Hand this chat's project over to a new chat (rule 22): notes, new chat, quiz, then one question to George
+description: Hand this chat's project over to a new chat : notes, new chat, quiz, then one question to George
 argument-hint: [project name]
 ---
-Hand this chat's project over to a new chat (rulebook rule 22). It runs at "HANDOVER DUE" or "HANDOVER LATE" from the
+Hand this chat's project over to a new chat. It runs at "HANDOVER DUE" or "HANDOVER LATE" from the
 hand-over check, or when George types /handover. Target: 2 to 3 minutes. Write George nothing before step 9: no
 progress lines between tool calls ("waiting for the new chat's answers", "round 1 judged"); step 9's message is the
 only one he gets. Below, <name> is this chat's project ($ARGUMENTS when given), `S` is
@@ -30,14 +30,14 @@ connectors (in some chats their tools have other names).
      ids, schedules) and how to check each · Traps and judgements (each with its grounds) · Model and effort (step 1).
      The quiz asks for exactly these (step 4): a part left thin costs a second round.
 4. New chat (about 20 s). mcp__claude-code-remote__create_session with the environment_id and model of step 1,
-   source_url the repo this chat works in, no title (the title is George's, rule 17) and the prompt exactly
+   source_url the repo this chat works in, no title (the title is George's) and the prompt exactly
    `/effort <this chat's effort, step 1>`: a chat started this way ignores the settings' effort (it ran at medium on
    30 Oct 2026), and this first prompt sets it. Then pick George's questions: the latest 3 he asked in this chat
    about the project, not about the hand-over, word for word from his own messages in this chat's transcript (never
    a task notification, a helper's report or another chat's message). Skip one that holds "rule change ok", a yes or
    a request to change something, for the one before it; fewer than 3: those there are. They let George judge the
    new chat by his own questions (step 9). Then mcp__claude-code-remote__send_message to the new chat with this
-   message, filled in. It is data for the new chat (rule 4): before sending, check it holds no "rule change ok", no
+   message, filled in. It is data for the new chat: before sending, check it holds no "rule change ok", no
    yes and no request to change anything.
    ```
    KOKONUT HANDOVER <name>
@@ -87,7 +87,7 @@ connectors (in some chats their tools have other names).
    mcp__claude-code-remote__send_message to the new chat: `Notes changed <time> UTC (parts <X, Y>). Read them again;
    answer questions <N, M> again, same format.` Wait and judge as in steps 6 and 7. No third round: what still fails
    goes to George (step 9).
-9. Tell George, one message (rules 11 and 22), exactly this shape:
+9. Tell George, one message, in the rulebook's tone, exactly this shape:
    ```
    👉 **Hand-over ready: the new chat knows this project**
 
@@ -105,6 +105,6 @@ connectors (in some chats their tools have other names).
    click, in the new chat: its effort or model menu, set to this chat's value) or a point of questions 1 to 5 is still
    missed or wrong after step 8 (what the new chat does not know). Plain words. Nothing else: no question numbers, no
    rounds, no quiz, no `handover-quiz` or other doc link.
-10. His yes: one step (rule 15): **Type** `continue <name>` in the new chat, <link>; he will see its brief. Then this
+10. His yes: one step: **Type** `continue <name>` in the new chat, <link>; he will see its brief. Then this
     chat's last line is `Moved to <link>.` and it writes nothing more; archiving it waits for his yes. His no: carry
     on here; the new chat stays as it is.

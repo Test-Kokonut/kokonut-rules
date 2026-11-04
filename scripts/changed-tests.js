@@ -24,7 +24,7 @@ const ROOT = path.resolve(__dirname, '..');
 const EVERY_TEST = ['package.json', '.github/workflows/tests.yml', 'scripts/changed-tests.js'];
 // Files read by tests not named after them: the file, or a folder ending in "/", and those tests.
 const OTHER_READERS = {
-  'CLAUDE.md': ['tests/rulebook.test.js', 'tests/rulebook-hooks.test.js'],
+  'CLAUDE.md': ['tests/rulebook.test.js'],
 };
 const SKIP = new Set(['.git', 'node_modules']);
 
