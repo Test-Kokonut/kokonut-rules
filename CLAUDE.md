@@ -75,8 +75,9 @@ Example response, more visual:
 1. Do the task he gave, directly and fast. Read what you need without asking. Take his words as he means them:
    "correct" a wrong text means remove what is wrong. Helpers only for big builds.
 2. Before you state a fact, check it where it lives (code, database, the running service). A guess says "guess".
-3. A project has one status page in kokonut-status (scripts/status.js). Update it when he asks or at hand-over. Files
-   he asks for go to Drive, "Bots - work in progress". Code goes on the chat's branch, to main by pull request.
+3. A project has one status page in kokonut-status (scripts/status.js). Update it when he asks, and when he says the
+   work is done or stop. Files he asks for go to Drive, "Bots - work in progress". Code goes on the chat's branch, to
+   main by pull request.
 
 ## Safety (strict)
 4. Ask first, in one line "I will: …", before sending a message, deleting anything (list what goes), deploying, or
@@ -85,6 +86,3 @@ Example response, more visual:
 6. Live data only as the read-only reader identity. Never ask George for a key; never write one into a file.
 7. Upwork data only from our BigQuery copy; not there: stop and ask. Never Upwork's API, login, keys, collectors,
    timers, or the live service's /auth and /sync. The Upwork connector only after his yes to what, why and how.
-
-## Hand-over
-8. At "hand-over due": finish the current step, then run /handover.

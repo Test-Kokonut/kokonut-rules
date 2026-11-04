@@ -5,8 +5,7 @@
 #   /root/.claude/CLAUDE.md       kokonut-rules' CLAUDE.md, the rulebook the chat loads (the repos' copies excluded)
 #   /root/.claude/hooks/*.js      the hooks kokonut-rules' .claude/settings.json wires, and the hooks they require
 #   /root/.claude/settings.json   kokonut-rules' .claude/settings.json, its hook commands made absolute
-#   /root/.claude/commands/*.md   the slash commands of kokonut-rules' .claude/commands (COMMANDS below): /continue,
-#                                 /handover
+#   /root/.claude/commands/*.md   the slash commands of kokonut-rules' .claude/commands (COMMANDS below): /continue
 #   /root/.claude/kokonut/        this script, once.sh and make-settings.js, and what the last run saw
 # Never /home/user/.claude: Claude Code reads that folder too, as /home/user's project settings, and the hooks would
 # fire twice.
@@ -33,7 +32,7 @@ mode=${1:-setup}
 REAL=/root/.claude
 REPO=Test-Kokonut/kokonut-rules
 # The slash commands installed in <dest>/commands, from kokonut-rules' .claude/commands/. A new command is added here.
-COMMANDS='continue.md handover.md'
+COMMANDS='continue.md'
 NODE=$(command -v node 2>/dev/null) || NODE=/opt/node22/bin/node
 WHY=
 
@@ -256,7 +255,7 @@ case $mode in
     DEST=${KOKONUT_DEST:-$REAL} ;;
   session-start)
     DEST=$(cd "$(dirname "$0")/.." 2>/dev/null && pwd) || exit 0 ;;
-  install) # the handover: the downloaded copy installs what the running copy downloaded
+  install) # the hand-off: the downloaded copy installs what the running copy downloaded
     DL=${2:-}; DEST=${3:-}; mode=${4:-}; BRANCH=${5:-main}
     case $mode in setup | session-start) ;; *) echo "setup.sh install: no such mode: $mode" >&2; exit 2 ;; esac
     KK=$DEST/kokonut

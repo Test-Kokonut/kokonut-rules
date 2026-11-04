@@ -32,7 +32,7 @@ const WHERE = [
   '- Projects: kokonut-status projects/<name>.md, read and saved only with its scripts/status.js.',
   '- Reading live data: kokonut-upwork-sync shared/README.md.',
   '- Drive: "Bots - work in progress", https://drive.google.com/drive/folders/1O-b-xz-JTbHesM9S5GdB3OpecQZoJQjy',
-  '- Rules: kokonut-rules (CLAUDE.md, hooks, setup.sh, /continue, /handover).',
+  '- Rules: kokonut-rules (CLAUDE.md, hooks, setup.sh, /continue).',
 ].join('\n');
 // The environment gcloud runs in: this one without the placeholder token.
 function gcloudEnv(env) {

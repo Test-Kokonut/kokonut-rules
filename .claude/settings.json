@@ -42,7 +42,6 @@
   "disableWorkflows": true,
   "hooks": {
     "SessionStart": [{ "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.js\"", "timeout": 60 }] }],
-    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/handover-check.js\"", "timeout": 10 }] }],
     "PreToolUse": [{ "matcher": "Bash|PowerShell", "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/no-main.js\"", "timeout": 10 },
                                                              { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard.js\"", "timeout": 20 }] }]
   }

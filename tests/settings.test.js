@@ -51,17 +51,16 @@ test("deny: the GitHub connector's write tools, which write to any branch past t
   assert.strictEqual(settings.hooks.PreToolUse[0].matcher, 'Bash|PowerShell', 'the push guard sees only shell commands');
 });
 
-test('hooks: session start; the hand-over check on George\'s messages; no-main, then guard on shell commands; nothing else; every hook file present, every hook file used', () => {
+test('hooks: session start; no-main, then guard on shell commands; nothing else; every hook file present, every hook file used', () => {
   assert.strictEqual(settings.disableWorkflows, true);
   const hooks = settings.hooks;
   const file = (h) => /\$CLAUDE_PROJECT_DIR\/\.claude\/hooks\/(.+?)"/.exec(h.command)[1];
   const shape = (event) => hooks[event].map((g) => ({ matcher: g.matcher, hooks: g.hooks.map((h) => [file(h), h.timeout]) }));
   assert.deepStrictEqual(shape('SessionStart'), [{ matcher: undefined, hooks: [['session-start.js', 60]] }]);
-  assert.deepStrictEqual(shape('UserPromptSubmit'), [{ matcher: undefined, hooks: [['handover-check.js', 10]] }]);
   assert.deepStrictEqual(shape('PreToolUse'), [
     { matcher: 'Bash|PowerShell', hooks: [['no-main.js', 10], ['guard.js', 20]] },
   ]);
-  assert.deepStrictEqual(Object.keys(hooks), ['SessionStart', 'UserPromptSubmit', 'PreToolUse'], 'no hook after a tool call and none at the stop');
+  assert.deepStrictEqual(Object.keys(hooks), ['SessionStart', 'PreToolUse'], 'no hook on a message, after a tool call or at the stop');
   const used = [];
   for (const event of Object.keys(hooks)) {
     for (const group of hooks[event]) {
