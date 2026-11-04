@@ -10,8 +10,8 @@ Continue the project named $ARGUMENTS. Write George nothing until step 3 or 4.
 2. Run `S read $ARGUMENTS`. It prints the page, then a line `--- BASE <id>`: keep that id for a later save. "No page":
    a new project, step 4.
 3. A page: read it, and the file named `notes` in its Drive folder when there is one (the Folder link, else the folder
-   named $ARGUMENTS in "Bots - work in progress", id 1O-b-xz-JTbHesM9S5GdB3OpecQZoJQjy). Tell George at most 3 lines:
-   what the project is for, where it stands, the next step. Never paste the page. Then start the next step.
+   named $ARGUMENTS in "Bots - work in progress", id 1O-b-xz-JTbHesM9S5GdB3OpecQZoJQjy). Tell George one line: the
+   next step, and what he must do if it needs him. Never paste the page. Then start the next step.
 4. No page: ask George in one line what the project is for, then start the work. Make the page only when there is
    something to keep: `S new <name> <file> --message "New page"`, where <name> is $ARGUMENTS, with today's date
    (`2026-11-04_example`) in front when it has none. Make its Drive folder then: a folder named <name> in "Bots - work
