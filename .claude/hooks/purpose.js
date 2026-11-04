@@ -22,8 +22,9 @@ const { lastAssistantText, isYes } = require('./transcript.js');
 const PIN_FILE = path.join('.claude', 'kokonut-purpose.md');
 const NOT_PINNED = 'No Purpose and Done when pinned. Before the first change: a reply with the lines "Purpose:" and ' +
   '"Done when:" in George\'s words, then his ok pins them. A question needs none.';
-const PURPOSE = /^\s*(?:[-*•]\s*)?\**Purpose\**\s*:\**\s*(.*)$/i;
-const DONE = /^\s*(?:[-*•]\s*)?\**Done when\**\s*:\**\s*(.*)$/i;
+// The two lines, whatever comes before the word: an icon, a bullet, bold marks ("👉 **Purpose:** ...").
+const PURPOSE = /^[^A-Za-z0-9]*Purpose\**\s*:\**\s*(.*)$/i;
+const DONE = /^[^A-Za-z0-9]*Done when\**\s*:\**\s*(.*)$/i;
 const ITEM = /^\s*(?:[-*•]|\d+[.)])\s+(.+)$/;
 const LABEL = /^\**[A-Z][\w ]{0,24}\**:/; // a list item that opens another part ("Next: ...", "State: ...") ends the list
 const MAX_ITEMS = 8;

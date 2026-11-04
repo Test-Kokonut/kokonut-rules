@@ -23,6 +23,7 @@ test('extract: the Purpose line and the Done when items of a reply, in the pinne
   assert.strictEqual(extract(PROPOSAL), PINNED);
   assert.strictEqual(extract('**Purpose:** fix the alerts\n**Done when:** no alert is late for a week'), 'Purpose: fix the alerts\nDone when:\n- no alert is late for a week\n');
   assert.strictEqual(extract('- Purpose: a\n- Done when: b\n- Next: c'), 'Purpose: a\nDone when:\n- b\n');
+  assert.strictEqual(extract('👉 **Purpose:** no alert is late.\n✅ **Done when:**\n- every alert within 5 minutes\nOk?'), 'Purpose: no alert is late.\nDone when:\n- every alert within 5 minutes\n', 'icons and bold before the words');
   assert.strictEqual(extract('Purpose: a\nNothing else'), '', 'no Done when: nothing to pin');
   assert.strictEqual(extract('Done when:\n- b'), '', 'no Purpose: nothing to pin');
   assert.strictEqual(extract(''), '');
