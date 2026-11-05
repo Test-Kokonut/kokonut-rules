@@ -11,7 +11,9 @@ const text = fs.readFileSync(path.join(ROOT, 'CLAUDE.md'), 'utf8').replace(/\r/g
 const lines = text.replace(/\n$/, '').split('\n');
 
 test('the parts, in order', () => {
-  assert.deepStrictEqual(lines.filter((l) => l.startsWith('#')), ['# How to work for George', '## Replies', '## Work', '## Safety (strict)']);
+  assert.deepStrictEqual(lines.filter((l) => l.startsWith('#')), [
+    '# How to work for George', '## 🎯 Purpose', '## 💬 Tone', '## Replies', '## Work', '## Safety (strict)',
+  ]);
 });
 
 test('the numbered rules run 1 to 15, each wrapped line indented', () => {
@@ -54,5 +56,9 @@ test('rule 9 shows the two lines only on ask or unclear scope, rule 12 limits an
 });
 
 test('the status icons of rule 1 are the five George chose', () => {
-  for (const icon of ['👉', '✅', '⚠️', '⛔', '💬']) assert.ok(lines[4].includes(icon) || lines[5].includes(icon), icon);
+  const start = lines.findIndex((l) => l.startsWith('1. '));
+  const end = lines.findIndex((l) => l.startsWith('2. '));
+  assert.ok(start >= 0 && end > start, 'rule 1 and rule 2 found');
+  const rule1 = lines.slice(start, end).join(' ');
+  for (const icon of ['👉', '✅', '⚠️', '⛔', '💬']) assert.ok(rule1.includes(icon), icon);
 });
