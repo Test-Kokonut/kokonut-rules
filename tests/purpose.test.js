@@ -73,6 +73,17 @@ test('his ok to a reply with Purpose and Done when pins them with the time; ever
   assert.doesNotMatch(PINNED_HEAD, /keep to it/, 'an old pin is not the current job (rule 9)');
 });
 
+test('review 11: a pin from before the change (no "Approved" line, often set with no ok) is never shown as approved', () => {
+  const dir = scratch();
+  fs.mkdirSync(path.dirname(pinFile(dir)), { recursive: true });
+  fs.writeFileSync(pinFile(dir), 'Purpose: legacy pin written without an ok\nDone when:\n- x\n');
+  const file = transcript(dir, [george('hi'), reply('💬 hello')]);
+  const out = check({ hook_event_name: 'UserPromptSubmit', prompt: 'what next?', transcript_path: file }, { home: dir, now: NOW });
+  assert.strictEqual(out, NOT_PINNED);
+  check({ hook_event_name: 'UserPromptSubmit', prompt: 'ok', transcript_path: transcript(dir, [reply(PROPOSAL)]) }, { home: dir, now: NOW });
+  assert.strictEqual(fs.readFileSync(pinFile(dir), 'utf8'), STAMP + PINNED, 'his ok replaces it');
+});
+
 test('recordApproval: the approval with its time; the same approval keeps its first time; a new one replaces it', () => {
   const dir = scratch();
   assert.strictEqual(recordApproval('I will: deploy api.', dir, NOW), true);

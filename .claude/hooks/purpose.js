@@ -100,7 +100,8 @@ function check(input, options) {
   }
   let current = '';
   try { current = fs.readFileSync(file, 'utf8').trim(); } catch (e) { current = ''; }
-  if (current) return PINNED_HEAD + '\n' + current;
+  // A pin without its "Approved" line was written before 5 Nov 2026, often with no ok of his: never shown as approved.
+  if (current.startsWith('Approved ')) return PINNED_HEAD + '\n' + current;
   return NOT_PINNED;
 }
 

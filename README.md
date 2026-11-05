@@ -20,12 +20,14 @@ downloads it with no login.
   - `guard.js`: refuses Upwork API or login addresses, and a commit or push that holds a key.
   - `yes-gate.js`: refuses a call that sends, deletes, deploys or changes what others use (mail, Slack, Drive,
     Docs, Sheets, Calendar, GitHub merges, chats and scheduled tasks, Upwork, deploys, BigQuery and SQL writes, a
-    status page) unless George's last message approves that action and its targets: his yes to the "I will:"
-    lines of the reply he answered, or his order naming the action with its own words ("deploy", "merge",
-    "sheet", ...: a word match, no reading into his words) and each target (a recipient, a channel, a file, a repo
-    and its number, a branch, a service, a table, a page). Questions, refusals and quoted text approve nothing; the
-    saved scope is never read (rule 12). Reading, answering, editing files, commits, pushing the chat's branch,
-    opening a pull request and helpers pass.
+    status page) unless George's last message approves that action and its exact targets in one sentence: his yes
+    to an "I will:" line of the reply he answered, or a short order of his own, naming the action ("mail",
+    "merge", "sheet", ...) with a word that does it ("send", "merge", "update", ...: a word match, no reading into
+    his words) and each target (every recipient, the channel, the file and who it is shared with, the repo and
+    its number, the branch, the service, the table, the page, or the whole command). Questions, refusals, quoted
+    or pasted text and long messages approve nothing; the saved scope is never read; whatever the gate cannot
+    verify, and any error, is refused (rule 12). Reading, answering, editing files, commits, pushing the chat's
+    branch, opening a pull request and helpers pass.
   - `transcript.js`: what the hooks read from the chat's transcript (George's last message, the last reply, what
     counts as his yes).
 - `scripts/score.js` and `scripts/score-task.md`: the nightly score. A scheduled task starts a fresh chat once a

@@ -42,8 +42,9 @@ test('rule 9 shows the two lines only on ask or unclear scope, rule 12 limits an
   assert.match(rule9, /only when he asks or when unclear scope needs his decision/);
   assert.doesNotMatch(rule9, /gated step/, 'no routine lines before a shared step: the gate does not need them');
   const rule12 = rule(12);
-  assert.match(rule12, /An approval covers only the actions and targets it names/);
+  assert.match(rule12, /An approval covers only the actions and exact targets one sentence of it names/);
   assert.match(rule12, /a saved scope approves nothing/);
+  assert.match(rule12, /what the gate cannot verify, it refuses/);
   const { NOT_PINNED } = require('../.claude/hooks/purpose.js');
   assert.match(NOT_PINNED, /Rule 9 says when/, 'the reminder points to rule 9');
   assert.doesNotMatch(NOT_PINNED, /gated step|unclear scope/, 'the reminder does not restate rule 9');
