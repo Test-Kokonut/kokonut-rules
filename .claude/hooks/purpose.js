@@ -6,11 +6,12 @@
 // The pin: ~/.claude/kokonut-purpose.md (one chat per machine in the cloud). While nothing is pinned, the chat's last
 // reply holding a line "Purpose: ..." and a line "Done when: ..." (the latter's text, or the list items under it,
 // up to 8) is pinned at George's next message, whatever it says: a reply that shows them (rule 9) goes on; he
-// corrects them if wrong. Once pinned, a later reply with both lines pins again only when his message is a yes (transcript.js
-// isYes), so the purpose changes on his ok. yes-gate.js pins the same way before a gated call in the first turn.
+// corrects them if wrong. Once pinned, a later reply with both lines pins again only when his message is a yes
+// (transcript.js isYes), so the purpose changes on his ok. yes-gate.js pins the same way before a gated call in the
+// first turn. The pin is the last scope he okayed: the chat keeps the current job's scope itself (rule 9).
 // What it prints, on stdout, as context for the chat (never for George):
 //   just pinned:  "Pinned now:" and the pinned lines;
-//   pinned:       "Pinned (keep to it, never repeat it to George):" and the pinned lines;
+//   pinned:       PINNED_HEAD and the pinned lines;
 //   not pinned:   one line saying when rule 9 shows Purpose and Done when, and that a question needs none.
 // yes-gate.js refuses a shared change while nothing is pinned.
 // Node only, no packages. Any error prints nothing; it always exits 0.
@@ -21,9 +22,8 @@ const path = require('path');
 const { lastAssistantText, isYes } = require('./transcript.js');
 
 const PIN_FILE = path.join('.claude', 'kokonut-purpose.md');
-const NOT_PINNED = 'No Purpose and Done when pinned. Keep the job\'s scope yourself. Show the lines "Purpose:" and ' +
-  '"Done when:" only when George asks, when unclear scope needs his decision, or with the "I will:" line of a ' +
-  'gated step (rule 9). A question needs none.';
+const NOT_PINNED = 'No Purpose and Done when pinned. Rule 9 says when to show them; a question needs none.';
+const PINNED_HEAD = 'Last scope George okayed (never repeat it to George; keep the current job\'s scope, rule 9):';
 // The two lines, whatever comes before the word: an icon, a bullet, bold marks ("👉 **Purpose:** ...").
 const PURPOSE = /^[^A-Za-z0-9]*Purpose\**\s*:\**\s*(.*)$/i;
 const DONE = /^[^A-Za-z0-9]*Done when\**\s*:\**\s*(.*)$/i;
@@ -83,7 +83,7 @@ function check(input, options) {
   }
   let current = '';
   try { current = fs.readFileSync(file, 'utf8').trim(); } catch (e) { current = ''; }
-  if (current) return 'Pinned (keep to it, never repeat it to George):\n' + current;
+  if (current) return PINNED_HEAD + '\n' + current;
   return NOT_PINNED;
 }
 
@@ -122,4 +122,4 @@ function pinFromReply(transcriptPath, home) {
   } catch (e) { return false; }
 }
 
-module.exports = { check, extract, pinFile, pinFromReply, NOT_PINNED, PIN_FILE };
+module.exports = { check, extract, pinFile, pinFromReply, NOT_PINNED, PINNED_HEAD, PIN_FILE };

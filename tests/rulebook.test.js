@@ -30,6 +30,17 @@ test('the rules the hooks enforce are written: the pin (rule 9) and the yes befo
   assert.match(text, /The gate blocks it otherwise/, 'rule 12 says the gate blocks');
 });
 
+test('rule 9 shows the two lines before a gated step, and the reminder points to rule 9 instead of copying it', () => {
+  const start = lines.findIndex((l) => l.startsWith('9. '));
+  const end = lines.findIndex((l) => l.startsWith('10. '));
+  const rule9 = lines.slice(start, end).join(' ').replace(/\s+/g, ' ');
+  assert.match(rule9, /"Purpose:" and "Done when:"/, 'rule 9 names the two lines');
+  assert.match(rule9, /before the job's first gated step/, 'the gate refuses a gated step while nothing is pinned');
+  const { NOT_PINNED } = require('../.claude/hooks/purpose.js');
+  assert.match(NOT_PINNED, /Rule 9 says when/, 'the reminder points to rule 9');
+  assert.doesNotMatch(NOT_PINNED, /gated step|unclear scope/, 'the reminder does not restate rule 9');
+});
+
 test('the status icons of rule 1 are the five George chose', () => {
   for (const icon of ['👉', '✅', '⚠️', '⛔', '💬']) assert.ok(lines[4].includes(icon) || lines[5].includes(icon), icon);
 });

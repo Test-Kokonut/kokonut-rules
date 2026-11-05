@@ -4,7 +4,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { ROOT, scratch, cleanup, runHook } = require('./sandbox');
-const { check, extract, pinFile, NOT_PINNED } = require('../.claude/hooks/purpose.js');
+const { check, extract, pinFile, NOT_PINNED, PINNED_HEAD } = require('../.claude/hooks/purpose.js');
 
 const HOOK = path.join(ROOT, '.claude', 'hooks', 'purpose.js');
 after(cleanup);
@@ -63,7 +63,9 @@ test('his ok to a reply with Purpose and Done when pins them; every later messag
   assert.strictEqual(first, 'Pinned now:\n' + PINNED.trim());
   assert.strictEqual(fs.readFileSync(pinFile(dir), 'utf8'), PINNED);
   const later = check({ hook_event_name: 'UserPromptSubmit', prompt: 'and the second alert?', transcript_path: file }, { home: dir });
-  assert.strictEqual(later, 'Pinned (keep to it, never repeat it to George):\n' + PINNED.trim());
+  assert.strictEqual(later, PINNED_HEAD + '\n' + PINNED.trim());
+  assert.match(PINNED_HEAD, /never repeat it to George/);
+  assert.doesNotMatch(PINNED_HEAD, /keep to it/, 'an old pin is not the current job (rule 9)');
 });
 
 test('a yes to something else does not pin: the last reply holds no Purpose and Done when', () => {
