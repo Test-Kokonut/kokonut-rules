@@ -1,18 +1,17 @@
 #!/usr/bin/env node
-// purpose.js: keeps the chat's Purpose and Done when in front of it on every message of George's, and pins them
-// when he says ok to them (rule 9 of the rulebook).
+// purpose.js: keeps the last scope George approved in front of the chat on every message of his, marked as the
+// last approved one, never as the current job (rule 9 of the rulebook).
 // Written in kokonut-rules, run by the UserPromptSubmit hook in .claude/settings.json, installed machine-wide in a
 // cloud chat by kokonut-rules' setup.sh. Inside a helper (agent_id in its input) it prints nothing.
-// The pin: ~/.claude/kokonut-purpose.md (one chat per machine in the cloud). While nothing is pinned, the chat's last
-// reply holding a line "Purpose: ..." and a line "Done when: ..." (the latter's text, or the list items under it,
-// up to 8) is pinned at George's next message, whatever it says: rule 9 states them and goes on; he corrects them
-// if wrong. Once pinned, a later reply with both lines pins again only when his message is a yes (transcript.js
-// isYes), so the purpose changes on his ok. yes-gate.js pins the same way before a gated call in the first turn.
+// The pin: ~/.claude/kokonut-purpose.md (one chat per machine in the cloud): "Approved <date> <time> UTC", then the
+// scope. Only an approval writes it: his yes to a reply holding a line "Purpose: ..." and a line "Done when: ..."
+// (the latter's text, or the list items under it, up to 8), written here; or a shared step yes-gate.js let pass on
+// his order or his yes to an "I will:" line, written there (recordApproval). Each approval replaces the one before.
+// The pin approves nothing: yes-gate.js never reads it.
 // What it prints, on stdout, as context for the chat (never for George):
-//   just pinned:  "Pinned now:" and the pinned lines;
-//   pinned:       "Pinned (keep to it, never repeat it to George):" and the pinned lines;
-//   not pinned:   one line saying a change needs Purpose and Done when in his words and his ok, and a question none.
-// yes-gate.js refuses a shared change while nothing is pinned.
+//   just pinned:  "Pinned now:" and the pin;
+//   pinned:       PINNED_HEAD and the pin;
+//   not pinned:   one line saying rule 9 tells when to show Purpose and Done when, and that a question needs none.
 // Node only, no packages. Any error prints nothing; it always exits 0.
 'use strict';
 const fs = require('fs');
@@ -21,8 +20,12 @@ const path = require('path');
 const { lastAssistantText, isYes } = require('./transcript.js');
 
 const PIN_FILE = path.join('.claude', 'kokonut-purpose.md');
-const NOT_PINNED = 'No Purpose and Done when pinned. The first reply on a job holds the lines "Purpose:" and ' +
-  '"Done when:" in George\'s words, then the work starts. A question needs none.';
+const NOT_PINNED = 'No Purpose and Done when pinned. Rule 9 says when to show them; a question needs none.';
+const PINNED_HEAD = 'Last scope George approved (it approves nothing new; never repeat it to George; keep the current ' +
+  'job\'s scope, rule 9):';
+const MAX_PIN = 600; // characters of an approval kept in the pin
+// What looks like a key or token: a known prefix, or 24 or more letters and digits mixed in one word.
+const SECRET = /\b(?:sk|ghp|gho|ghs|github_pat|AIza|xox[abps]|ya29|AKIA)[A-Za-z0-9_\-.]{8,}|\b(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Za-z])[A-Za-z0-9_-]{24,}\b/g;
 // The two lines, whatever comes before the word: an icon, a bullet, bold marks ("👉 **Purpose:** ...").
 const PURPOSE = /^[^A-Za-z0-9]*Purpose\**\s*:\**\s*(.*)$/i;
 const DONE = /^[^A-Za-z0-9]*Done when\**\s*:\**\s*(.*)$/i;
@@ -60,29 +63,49 @@ function extract(reply) {
   return `Purpose: ${purpose}\nDone when:\n${done.map((d) => '- ' + d).join('\n')}\n`;
 }
 
-// The text to print for a hook input, '' for none. options: { home } for the tests.
+// "YYYY-MM-DD HH:MM UTC" of a time (now by default).
+function stamp(now) {
+  return (now || new Date()).toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+}
+
+// Writes an approved scope as the pin, with its time; the same scope again keeps its first time. true when the pin
+// holds it. For this hook (his yes to Purpose and Done when) and for yes-gate.js (a step it let pass).
+function recordApproval(text, home, now) {
+  let body = String(text || '').replace(SECRET, '[hidden]').trim(); // never a key into a file (rule 14)
+  if (!body) return false;
+  if (body.length > MAX_PIN) body = Array.from(body).slice(0, MAX_PIN).join('').trimEnd() + ' …';
+  const file = pinFile(home);
+  let old = '';
+  try { old = fs.readFileSync(file, 'utf8'); } catch (e) { old = ''; }
+  // The same approval again keeps its first time; a pin without its "Approved" line (from before 5 Nov 2026) never
+  // counts as one.
+  if (old.startsWith('Approved ') && old.replace(/^Approved [^\n]*\n/, '').trim() === body) return true;
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, `Approved ${stamp(now)}\n${body}\n`);
+  return true;
+}
+
+// The text to print for a hook input, '' for none. options: { home, now } for the tests.
 function check(input, options) {
   const o = options || {};
   if (!input || typeof input !== 'object' || input.agent_id) return '';
   if (input.hook_event_name && input.hook_event_name !== 'UserPromptSubmit') return '';
   const file = pinFile(o.home);
   const prompt = typeof input.prompt === 'string' ? input.prompt : '';
-  let had = false;
-  try { had = fs.readFileSync(file, 'utf8').trim() !== ''; } catch (e) { had = false; }
-  if (!had || isYes(prompt)) {
+  if (isYes(prompt)) {
     let pinned = '';
     try { pinned = extract(lastAssistantText(input.transcript_path)); } catch (e) { pinned = ''; }
     if (pinned) {
       try {
-        fs.mkdirSync(path.dirname(file), { recursive: true });
-        fs.writeFileSync(file, pinned);
-        return 'Pinned now:\n' + pinned.trim();
+        recordApproval(pinned, o.home, o.now);
+        return 'Pinned now:\n' + fs.readFileSync(file, 'utf8').trim();
       } catch (e) { /* no pin written: the chat is told below */ }
     }
   }
   let current = '';
   try { current = fs.readFileSync(file, 'utf8').trim(); } catch (e) { current = ''; }
-  if (current) return 'Pinned (keep to it, never repeat it to George):\n' + current;
+  // A pin without its "Approved" line was written before 5 Nov 2026, often with no ok of his: never shown as approved.
+  if (current.startsWith('Approved ')) return PINNED_HEAD + '\n' + current;
   return NOT_PINNED;
 }
 
@@ -107,18 +130,4 @@ if (require.main === module) {
   setTimeout(go, 3000);
 }
 
-// Pins the last reply's lines when nothing is pinned yet; true when it did. For yes-gate.js, in the first turn.
-function pinFromReply(transcriptPath, home) {
-  const file = pinFile(home);
-  try { if (fs.readFileSync(file, 'utf8').trim()) return true; } catch (e) { /* nothing pinned */ }
-  let pinned = '';
-  try { pinned = extract(lastAssistantText(transcriptPath)); } catch (e) { pinned = ''; }
-  if (!pinned) return false;
-  try {
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, pinned);
-    return true;
-  } catch (e) { return false; }
-}
-
-module.exports = { check, extract, pinFile, pinFromReply, NOT_PINNED, PIN_FILE };
+module.exports = { check, extract, pinFile, recordApproval, stamp, NOT_PINNED, PINNED_HEAD, PIN_FILE };
