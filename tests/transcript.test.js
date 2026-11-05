@@ -21,7 +21,8 @@ function transcript(dir, name, entries) {
 }
 
 test('a yes: yes, ok, go, agree, merge it, deploy it, rule change ok, with a short tail that holds no doubt', () => {
-  for (const t of ['yes', 'Yes', 'ok', 'k', 'go', 'go, build it', 'yes - let\'s move on', 'yes fix both', 'merge it', 'Merge it.',
+  for (const t of ['Yes. But why do you speak like this?', 'Ok! And then read every chat I had this week and tell me what each one did wrong.',
+    'yes.\nalso what about the folder?', 'Go. Not the voice one though.', 'yes', 'Yes', 'ok', 'k', 'go', 'go, build it', 'yes - let\'s move on', 'yes fix both', 'merge it', 'Merge it.',
     'deploy it', 'agree', 'sure', 'fine', 'rule change ok', 'Go.', 'do it', 'ok, let\'s carry on', 'yes, do it that way']) {
     assert.strictEqual(isYes(t), true, t);
   }
@@ -29,7 +30,8 @@ test('a yes: yes, ok, go, agree, merge it, deploy it, rule change ok, with a sho
 
 test('not a yes: done, no, a question, a yes with a but, a long message, an order with no yes word', () => {
   for (const t of ['done', 'no', 'ok?', 'yes, but why is it that long', 'ok for what - be clear', 'not sure - test it with a bot?',
-    'status', 'what do you need from me?', 'yes but not the folder', 'Remove the hand-over entirely', 'Merge 6', 'send me the list',
+    'status', 'what do you need from me?', 'yes but not the folder', 'Remove the hand-over entirely', 'Merge 6', 'send me the list', 'Yes?',
+    'yes, but why is it that long?', 'No. Do it the other way.',
     'delete the old branches', 'deploy the api now',
     'yes and then also please go and read every chat I had this week and tell me what each one did wrong', '']) {
     assert.strictEqual(isYes(t), false, t);

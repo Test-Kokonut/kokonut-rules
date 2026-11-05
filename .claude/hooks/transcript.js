@@ -12,7 +12,9 @@
 // A yes: his message starts with a yes word (YES below: yes, ok, go, do it, agree, merge it, deploy it, ...; a bare
 // order like "merge 6" or "send the mail" is not a yes: yes-gate.js reads orders by their own words), is at
 // most 12 words, and the rest of it holds no but, not, no, except, unless, wait, why, what, or a question mark.
-// "go, build it" and "yes - let's move on" are a yes; "done", "yes, but ..." and "ok?" are not.
+// A yes that ends its own sentence ("Yes." or "Ok!", then anything at all) is a yes whatever follows: what comes
+// after the full stop is his next thought, not a condition. "go, build it", "yes - let's move on" and "Yes. But why
+// do you write like this?" are a yes; "done", "yes, but not the folder" and "ok?" are not.
 // Node only, no packages. Any error in a reader gives null or false, never a throw to the hook.
 'use strict';
 const fs = require('fs');
@@ -106,6 +108,8 @@ function mainTranscript(input) {
 // Whether a message of George's is a yes (see the top of the file).
 function isYes(text) {
   if (typeof text !== 'string') return false;
+  const first = /^([^.!\n?]{1,40})[.!]+(?:\s|$)/.exec(text.trim()); // the first sentence, closed by . or !
+  if (first && YES.test(first[1].trim().replace(/[,:;-]+$/, ''))) return true;
   const t = text.trim().replace(/[.!…\s]+$/, '');
   if (!t || t.split(/\s+/).length > 12) return false;
   const words = t.split(/\s+/);
