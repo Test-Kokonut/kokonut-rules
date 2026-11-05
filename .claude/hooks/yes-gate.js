@@ -251,7 +251,8 @@ function willLines(reply) {
       for (let j = i + 1; j < lines.length; j++) { const it = ITEM.exec(lines[j]); if (!it) break; items.push(it[1].trim()); }
       text = items.join('; ');
     }
-    if (text && !saysNo(text)) out.push(text); // "I will not send it" names nothing
+    text = text.split(SPLIT).map((s) => s.trim()).filter((s) => s && !saysNo(s)).join('. '); // "I will not send it" names nothing
+    if (text) out.push(text);
   }
   return out;
 }

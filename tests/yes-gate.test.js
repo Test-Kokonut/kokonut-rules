@@ -214,6 +214,9 @@ test('the "I will:" line in every usual form: an icon, bold around or inside, a 
   const queue = { type: 'queue-operation', operation: 'dequeue' };
   passes(dir, [reply('I will: deploy api.'), stopHook, queue, george('yes')], DEPLOY, "the app's own entries between the reply and his yes are passed over");
   blocks(dir, [reply('I will not deploy api yet.'), george('yes')], DEPLOY, 'a line that says no names nothing');
+  blocks(dir, [reply('I will not deploy api today. Shall I open the ticket?'), george('yes')], DEPLOY, 'a sentence that says no names nothing');
+  passes(dir, [reply('👉 I will delete the whole work folder: work, build inside it, and a.txt, which is empty. Nothing else is in it. Yes?'), george('yes')],
+    bash('rm -r work'), 'a no in another sentence of the line does not void the first');
   blocks(dir, [reply('I will: deploy api, not web.'), george('yes')], DEPLOY, 'a line that says no names nothing, colon or not');
   blocks(dir, [reply('Later I will deploy api.'), george('yes')], DEPLOY, 'not at the start of a line: not the line');
 });
