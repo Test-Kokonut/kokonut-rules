@@ -183,7 +183,7 @@ test('his yes passes only the kinds of action the "I will:" line of the reply ri
   passes(dir, [george('fix it'), reply('I will: deploy api. Yes?'), george('yes'), toolResult()], DEPLOY);
   blocks(dir, [george('fix it'), reply('I will: deploy api. Yes?'), george('yes'), toolResult()], SLACK, 'the line names no Slack');
   passes(dir, [reply(WILL_ANNA), george('yes')], MAIL_ANNA);
-  assert.strictEqual(fs.readFileSync(pinFile(dir), 'utf8'), STAMP + 'send the mail to anna@example.com.\n', 'the line is saved as the last approved scope');
+  assert.strictEqual(fs.readFileSync(pinFile(dir), 'utf8'), STAMP + 'send the mail to anna@example.com\n', 'the line is saved as the last approved scope');
   blocks(dir, [reply(WILL_ANNA), george('yes')], MERGE_19, 'the line names no merge');
   passes(dir, [reply('I will: push the new build live (deploying).'), george('go')], DEPLOY, 'the label names it');
   passes(dir, [reply('I will: deploy api.'), reply('Ready?'), george('yes')], DEPLOY, 'texts of one reply, with nothing between');
