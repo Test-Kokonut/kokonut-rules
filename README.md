@@ -18,16 +18,17 @@ downloads it with no login.
     "Done when:", or a shared step the gate let pass. It approves nothing (rules 9 and 12).
   - `no-main.js`: refuses every push to main or master (a pull request lands it).
   - `guard.js`: refuses Upwork API or login addresses, and a commit or push that holds a key.
-  - `yes-gate.js`: refuses a call that sends, deletes, deploys or changes what others use (mail, Slack, Drive,
-    Docs, Sheets, Calendar, GitHub merges, chats and scheduled tasks, Upwork, deploys, BigQuery and SQL writes, a
-    status page) unless George's last message approves that action and its exact targets in one sentence: his yes
-    to an "I will:" line of the reply he answered, or a short order of his own, naming the action ("mail",
-    "merge", "sheet", ...) with a word that does it ("send", "merge", "update", ...: a word match, no reading into
-    his words) and each target (every recipient, the channel, the file and who it is shared with, the repo and
-    its number, the branch, the service, the table, the page, or the whole command). Questions, refusals, quoted
-    or pasted text and long messages approve nothing; the saved scope is never read; whatever the gate cannot
-    verify, and any error, is refused (rule 12). Reading, answering, editing files, commits, pushing the chat's
-    branch, opening a pull request and helpers pass.
+  - `yes-gate.js`: a backstop, not proof of approval. It refuses a call that sends, deletes, deploys or changes
+    what others use (mail, Slack, Drive, Docs, Sheets, Calendar, GitHub merges, chats and scheduled tasks, Upwork,
+    deploys, BigQuery and SQL writes, a status page) unless George's last message orders that kind of action with
+    its own words ("mail", "merge", "sheet", ...: a word match, no reading into his words) in a sentence that does
+    not say no, or is his yes to a reply holding an "I will:" line that names it (rule 12). Questions, quoted,
+    pasted, fenced and blockquoted text approve nothing; the saved scope is never read; any error refuses. What it
+    does not check, by design: which recipient, file, branch, table or project a call acts on (the chat keeps to
+    what the order named); a repeat of an approved step in the same turn; whether an untagged paste or a scheduled
+    task's prompt is George's own message; commands in forms it does not read (`git -C`, a shell inside a shell)
+    and connector tools not on its list. Reading, answering, editing files, commits, pushing the chat's branch,
+    opening a pull request and helpers pass.
   - `transcript.js`: what the hooks read from the chat's transcript (George's last message, the last reply, what
     counts as his yes).
 - `scripts/score.js` and `scripts/score-task.md`: the nightly score. A scheduled task starts a fresh chat once a

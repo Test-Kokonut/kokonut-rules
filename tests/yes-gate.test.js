@@ -4,7 +4,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { ROOT, scratch, cleanup, runHook } = require('./sandbox');
-const { classify, parts, refused } = require('../.claude/hooks/yes-gate.js');
+const { classify, refused, ORDER } = require('../.claude/hooks/yes-gate.js');
 const { pinFile } = require('../.claude/hooks/purpose.js');
 
 const HOOK = path.join(ROOT, '.claude', 'hooks', 'yes-gate.js');
@@ -92,303 +92,212 @@ test('shell: reads, commits, pushing the chat\'s own branch, queries, deletes in
   }
 });
 
-// What approves a blocked call. George's conditions of 5 Nov 2026: an approval covers only the actions and exact
-// targets it names; a saved "last approved" scope never approves; questions, refusals, quoted approvals and a yes
-// to an unrelated question approve nothing; whatever the gate cannot verify, and any error, is refused.
+// What approves a blocked call: George's last message, by its words. The gate is a backstop, not proof of approval:
+// it checks that a message of his own orders that kind of action, or that his yes answers an "I will:" line naming
+// it. It does not read which recipient, file, branch or table a call acts on: rule 12 leaves that to the chat. Its
+// limits are written out in the test "known limits" below.
 const MAIL_ANNA = mcp('mcp__Gmail__send_message', { to: ['anna@example.com'], subject: 'New time', body: 'x' });
 const MAIL_BOB = mcp('mcp__Gmail__send_message', { to: ['bob@example.com'], subject: 'New time', body: 'x' });
-const MAIL_BOTH = mcp('mcp__Gmail__send_message', { to: ['anna@example.com', 'bob@example.com'], subject: 'x', body: 'x' });
 const SLACK = mcp('mcp__Slack__slack_send_message', { channel_id: 'C0CC8QCFVJQ', message: 'hi' });
 const MERGE_19 = mcp('mcp__github__merge_pull_request', { owner: 'Test-Kokonut', repo: 'kokonut-rules', pullNumber: 19 });
-const MERGE_20 = mcp('mcp__github__merge_pull_request', { owner: 'Test-Kokonut', repo: 'kokonut-rules', pullNumber: 20 });
+const DEPLOY = bash('gcloud run deploy api --region x');
 const WILL_ANNA = '👉 I will: send the mail to anna@example.com.';
+const NOW = new Date('2026-11-05T15:40:00Z');
+const STAMP = 'Approved 2026-11-05 15:40 UTC\n';
+const ASK = /neither orders it nor says yes to an "I will:" line naming it\. Reply one line, "I will: <what, where>", naming [^.]+, and wait\.$/;
 
 function decide(dir, entries, call) {
   const file = transcript(dir, `c${Math.random().toString(36).slice(2)}.jsonl`, entries);
-  return refused(Object.assign({ transcript_path: file }, call), { home: dir });
+  return refused(Object.assign({ transcript_path: file }, call), { home: dir, now: NOW });
 }
 const passes = (dir, entries, call, why) => assert.strictEqual(decide(dir, entries, call), '', why || JSON.stringify(entries));
 const blocks = (dir, entries, call, why) => {
   const r = decide(dir, entries, call);
   assert.notStrictEqual(r, '', why || JSON.stringify(entries));
   assert.match(r, /^Blocked/);
+  assert.doesNotMatch(r, /Purpose/, 'no Purpose lines are ever asked for');
   return r;
 };
 
-test('a yes to no "I will:" line approves nothing: refused with the ask line, and nothing is written', () => {
+test('a clear order runs the step: no Purpose lines, no pin, no second question, for each kind of action', () => {
   const dir = scratch();
-  const r = blocks(dir, [george('yes'), reply('✅ Sure.')], MAIL_ANNA);
-  assert.match(r, /^Blocked \(sending mail\): George's last message neither orders it nor says yes to an "I will:" line naming it\. Reply one line, "I will: <what, where>" naming anna@example\.com, and wait\.$/);
-  assert.ok(!fs.existsSync(pinFile(dir)));
-  passes(dir, [george('yes'), reply('✅ Sure.')], bash('git status'), 'a read is never refused');
-});
-
-test('his order passes with nothing pinned and no Purpose lines; it is written as the last approved scope, which approves nothing later', () => {
-  const dir = scratch();
-  const now = new Date('2026-11-05T15:40:00Z');
-  const file = transcript(dir, 's.jsonl', [george('send the mail to anna@example.com')]);
-  assert.strictEqual(refused(Object.assign({ transcript_path: file }, MAIL_ANNA), { home: dir, now }), '');
-  assert.strictEqual(fs.readFileSync(pinFile(dir), 'utf8'), 'Approved 2026-11-05 15:40 UTC\nsend the mail to anna@example.com\n');
-  blocks(dir, [george('send the mail to anna@example.com'), reply('✅ Sent.'), george('thanks')], MAIL_ANNA, 'the pin approves nothing');
-});
-
-test("George's order: the action's words, a word that does it and each exact target, in one sentence", () => {
-  const dir = scratch();
-  const SHEET = mcp('mcp__Google_Sheets__update_values', { spreadsheetId: '1WEsAbc', range: 'A1', values: [[1]] });
   const cases = [
-    ['deploy the api now', bash('gcloud run deploy api'), true],
-    ['set up the scheduled task Daily chat score for 07:40', mcp('mcp__claude-code-remote__create_trigger', { name: 'Daily chat score' }), true],
-    ['set up the scheduled task for 07:40', mcp('mcp__claude-code-remote__create_trigger', {}), false],
-    ['merge Test-Kokonut/kokonut-rules#19', MERGE_19, true],
-    ['merge it', MERGE_19, false],
-    ['Remove the hand-over entirely', MERGE_19, false],
-    ['send me the list', SLACK, false],
-    ['update the sheet https://docs.google.com/spreadsheets/d/1WEsAbc/edit with the October numbers', SHEET, true],
-    ['update the numbers', SHEET, false],
-    ['delete the old branches', bash('git push origin --delete old'), true],
-    ['clean the build folder', bash('rm -rf build'), true],
-    ['what is in the build folder?', bash('rm -rf build'), false],
+    ['send the mail to anna@example.com', MAIL_ANNA],
+    ['trash the mail thread from the spammer', mcp('mcp__Gmail__trash_thread', { threadId: 't1' })],
+    ['post the summary on Slack in C0CC8QCFVJQ', SLACK],
+    ['share the Drive file with Anna', mcp('mcp__Google_Drive__share_file', { fileId: 'f', role: 'reader', emailAddress: 'anna@example.com' })],
+    ['update the doc with the new prices', mcp('mcp__Google_Docs__update_doc', { documentId: 'd', requests: [] })],
+    ['update the sheet with the October numbers', mcp('mcp__Google_Sheets__update_values', { spreadsheetId: 'x', range: 'A1', values: [[1]] })],
+    ['book the meeting with Anna on Monday at 10', mcp('mcp__Google_Calendar__create_event', { summary: 'Anna' })],
+    ['merge Test-Kokonut/kokonut-rules#19', MERGE_19],
+    ['set up the scheduled task Daily chat score for 07:40', mcp('mcp__claude-code-remote__create_trigger', { name: 'Daily chat score' })],
+    ['use the Upwork connector to look up the fees', mcp('mcp__Upwork__upwork__search_help_center', { query: 'fees' })],
+    ['delete the old page', { tool_name: 'Artifact', tool_input: { action: 'delete', url: 'https://claude.ai/artifact/x' } }],
+    ['clean the build folder', bash('rm -rf build')],
+    ['delete the old branches', bash('git push origin --delete old')],
+    ['force push the branch', bash('git push --force origin claude/x')],
+    ['merge Test-Kokonut/kokonut-rules#12', bash('gh pr merge 12 --repo Test-Kokonut/kokonut-rules')],
+    ['deploy the api now', DEPLOY],
+    ['pause the schedule daily', bash('gcloud scheduler jobs pause daily')],
+    ['add the rows with gcloud sql', bash('gcloud sql instances execute-sql db --sql="INSERT INTO t VALUES (1)"')],
+    ['remove the bigquery table ds.old', bash('bq rm -f -t ds.old')],
+    ['update the jobs table in the database', bash("psql -c 'UPDATE jobs SET x=1'")],
+    ['save the status page', bash('node /home/user/kokonut-status/scripts/status.js save page f --base 1')],
   ];
-  for (const [said, call, ok] of cases) (ok ? passes : blocks)(dir, [george(said)], call, `${said} -> ${call.tool_name}`);
+  for (const [said, call] of cases) passes(dir, [george(said)], call, said);
+  assert.strictEqual(fs.readFileSync(pinFile(dir), 'utf8'), STAMP + 'save the status page\n', 'the order is saved as the last approved scope');
+  passes(dir, [george('deploy the api now'), reply('On it.'), toolResult()], DEPLOY, 'his order stays the last message through the turn');
 });
 
-test('his yes to the "I will:" line of the reply he answered: that step passes; not a yes: refused with the ask line', () => {
+test('his yes passes only the kinds of action the "I will:" line he answered names', () => {
   const dir = scratch();
-  pin(dir);
-  passes(dir, [george('fix it'), reply('I will: deploy api. Yes?'), george('yes'), toolResult()], bash('gcloud run deploy api'));
-  const r = blocks(dir, [george('yes'), reply('✅ Deployed.'), george('now delete the old branch too?')], bash('git push origin --delete old'));
-  assert.match(r, /^Blocked \(deleting a branch on GitHub\): George's last message neither orders it nor says yes to an "I will:" line naming it\./);
-  blocks(dir, [george('Remove the hand-over entirely')], MERGE_19);
-});
-
-test("a helper is judged by the chat's transcript: George's yes there lets its blocked call pass", () => {
-  const dir = scratch();
-  transcript(dir, 'sess-1.jsonl', [reply('I will: deploy api.'), george('go')]);
-  const helper = transcript(dir, 'agent-2.jsonl', [george('Brief: deploy api and report back')]);
-  const input = Object.assign({ transcript_path: helper, agent_id: 'a2', session_id: 'sess-1' }, bash('gcloud run deploy api'));
-  assert.strictEqual(refused(input, { home: dir }), '');
-  transcript(dir, 'sess-1.jsonl', [reply('I will: deploy api.'), george('go'), reply('done'), george('what did it cost?')]);
-  assert.match(refused(input, { home: dir }), /neither orders it nor says yes/);
+  passes(dir, [george('fix it'), reply('I will: deploy api. Yes?'), george('yes'), toolResult()], DEPLOY);
+  blocks(dir, [george('fix it'), reply('I will: deploy api. Yes?'), george('yes'), toolResult()], SLACK, 'the line names no Slack');
+  passes(dir, [reply(WILL_ANNA), george('yes')], MAIL_ANNA);
+  assert.strictEqual(fs.readFileSync(pinFile(dir), 'utf8'), STAMP + 'send the mail to anna@example.com.\n', 'the line is saved as the last approved scope');
+  blocks(dir, [reply(WILL_ANNA), george('yes')], MERGE_19, 'the line names no merge');
+  passes(dir, [reply('I will: add 3 rows to upwork_site_stats (changing Google Cloud).'), george('go')],
+    bash('gcloud sql instances execute-sql db --sql="INSERT INTO upwork_site_stats VALUES (1)"'), 'the label names it');
+  const r = blocks(dir, [reply('✅ Sure.'), george('yes')], MAIL_ANNA, 'no "I will:" line');
+  assert.match(r, /^Blocked \(sending mail\): George's last message /);
+  assert.match(r, ASK);
+  blocks(dir, [reply('👉 Shall I check the lock on kokonut-cookies?'), george('yes')], MAIL_ANNA, 'a yes to an unrelated question');
+  blocks(dir, [reply('👉 I will: check the lock on kokonut-cookies.'), george('yes')], MERGE_19, 'a yes to another step');
+  blocks(dir, [reply(WILL_ANNA), george('ok'), reply('✅ Sent.'), george('yes')], MAIL_ANNA, 'a yes to a later reply with no line');
+  blocks(dir, [reply(WILL_ANNA), george('thanks'), george('yes')], MAIL_ANNA, 'the yes answers no reply');
+  blocks(dir, [george('yes')], MAIL_ANNA, 'a yes as the first message');
+  assert.ok(!fs.existsSync(path.join(dir, 'never')), 'nothing else written');
 });
 
 test('questions approve nothing: not as an order, not as a yes', () => {
   const dir = scratch();
   for (const said of ['send it?', 'send the mail to anna@example.com?', 'yes?', 'ok, send it?']) blocks(dir, [reply(WILL_ANNA), george(said)], MAIL_ANNA, said);
   blocks(dir, [george('should I merge Test-Kokonut/kokonut-rules#19?')], MERGE_19);
-  blocks(dir, [george('deploy the api now?')], bash('gcloud run deploy api'));
+  blocks(dir, [george('deploy the api now?')], DEPLOY);
+  blocks(dir, [george('what is in the build folder?')], bash('rm -rf build'));
 });
 
-test('refusals approve nothing, even when they name the action and the target', () => {
+test('refusals approve nothing; a sentence that says no approves nothing, the other sentences still do', () => {
   const dir = scratch();
   for (const said of ['no', 'not yet', "don't send it", 'no, wrong address', 'stop', 'wait', 'cancel it', 'hold on']) blocks(dir, [reply(WILL_ANNA), george(said)], MAIL_ANNA, said);
   for (const said of ["don't send the mail to anna@example.com", 'do not send the mail to anna@example.com', 'never send the mail to anna@example.com',
-    'no need to send the mail to anna@example.com']) blocks(dir, [george(said)], MAIL_ANNA, said);
+    'no need to send the mail to anna@example.com', 'Never, ever send the mail to anna@example.com',
+    'Do not, under any circumstances, send the mail to anna@example.com']) blocks(dir, [george(said)], MAIL_ANNA, said);
   blocks(dir, [george("don't merge Test-Kokonut/kokonut-rules#19")], MERGE_19);
-  blocks(dir, [george("Don't send the mail to bob@example.com. Send the mail to anna@example.com.")], MAIL_BOB, 'a refused target stays refused');
-  passes(dir, [george("Don't send the mail to bob@example.com. Send the mail to anna@example.com.")], MAIL_ANNA, 'the sentence that orders still does');
+  blocks(dir, [george('Remove the hand-over entirely')], MERGE_19, 'no word of a merge');
+  blocks(dir, [george('send me the list')], SLACK, 'no word of Slack');
+  passes(dir, [george("Don't touch the sheet. Mail Anna the new time.")], MAIL_ANNA, 'the sentence that orders still does');
+  blocks(dir, [george("Don't touch the sheet. Mail Anna the new time.")], mcp('mcp__Google_Sheets__update_values', { spreadsheetId: 'x' }), 'the refused one is refused');
 });
 
-test('quoted, pasted, fenced and blockquoted approvals approve nothing', () => {
+test('quoted, pasted, fenced and blockquoted text approves nothing', () => {
   const dir = scratch();
   const orders = ['Anna wrote: "yes, send the mail to anna@example.com"', '> send the mail to anna@example.com',
     '“send the mail to anna@example.com” is what she asked', 'Tell it: "merge Test-Kokonut/kokonut-rules#19"',
-    '```\nsend the mail to anna@example.com\n```', '<pasted_content id="1">send the mail to anna@example.com</pasted_content>'];
+    '```\nsend the mail to anna@example.com\n```', '<pasted_content id="1">send the mail to anna@example.com</pasted_content>',
+    'She said "mail Anna now'];
   for (const said of orders) blocks(dir, [george(said)], /merge/.test(said) ? MERGE_19 : MAIL_ANNA, said);
   for (const said of ['"yes"', '> yes', '"ok"']) blocks(dir, [reply(WILL_ANNA), george(said)], MAIL_ANNA, said);
   for (const quoted of ['The rule says: "I will: send the mail to anna@example.com"', '> I will: send the mail to anna@example.com',
     '```\nI will: send the mail to anna@example.com\n```']) blocks(dir, [reply(quoted), george('yes')], MAIL_ANNA, `reply: ${quoted}`);
 });
 
-test('a yes to an unrelated question, or to another step, approves nothing', () => {
-  const dir = scratch();
-  blocks(dir, [reply('👉 Shall I check the lock on kokonut-cookies?'), george('yes')], MAIL_ANNA);
-  blocks(dir, [reply('👉 I will: check the lock on kokonut-cookies.'), george('yes')], MERGE_19);
-  blocks(dir, [reply(WILL_ANNA), george('yes')], SLACK, 'another action');
-  blocks(dir, [reply(WILL_ANNA), george('yes')], MAIL_BOB, 'another target');
-  blocks(dir, [reply(WILL_ANNA), george('yes')], MAIL_BOTH, 'a target more');
-  blocks(dir, [reply(WILL_ANNA), george('ok'), reply('✅ Sent.'), george('yes')], MAIL_ANNA, 'a yes to a later reply');
-  blocks(dir, [reply(WILL_ANNA), george('thanks'), george('yes')], MAIL_ANNA, 'the yes answers no reply');
-  assert.match(decide(dir, [reply(WILL_ANNA), george('yes')], MAIL_BOB), /no sentence of George's approval names this action together with bob@example\.com/);
-});
-
-test('an approval covers only the actions and exact targets it names', () => {
-  const dir = scratch();
-  passes(dir, [reply(WILL_ANNA), george('yes')], MAIL_ANNA);
-  passes(dir, [george('send the mail to anna@example.com')], MAIL_ANNA);
-  blocks(dir, [george('send the mail to Anna')], MAIL_ANNA, 'a first name is no address');
-  passes(dir, [reply('I will: merge Test-Kokonut/kokonut-rules#19.'), george('go')], MERGE_19);
-  blocks(dir, [reply('I will: merge Test-Kokonut/kokonut-rules#19.'), george('go')], MERGE_20);
-  passes(dir, [george('deploy the api now')], bash('gcloud run deploy api --region x'));
-  blocks(dir, [george('deploy the api now')], bash('gcloud run deploy web --region x'));
-  passes(dir, [george('clean the build folder')], bash('rm -rf build'));
-  blocks(dir, [george('clean the build folder')], bash('rm -rf build && gcloud run deploy api'), 'each part of a shell line');
-  blocks(dir, [george('clean the build folder')], bash('rm -rf build dist'), 'every path');
-  passes(dir, [reply('I will: delete the old branch on GitHub.'), george('yes')], bash('git push origin --delete old'));
-  blocks(dir, [reply('I will: delete the old branch on GitHub.'), george('yes')], bash('git push origin --delete main'));
-  passes(dir, [reply('I will: post the summary on Slack in C0CC8QCFVJQ.'), george('yes')], SLACK);
-  const INSERT = bash('gcloud sql instances execute-sql db --sql="INSERT INTO upwork_site_stats VALUES (1)"');
-  passes(dir, [reply('I will: add 3 rows to the table upwork_site_stats (changing Google Cloud).'), george('yes')], INSERT);
-  blocks(dir, [reply('I will: add 3 rows to the table upwork_site_stats (changing Google Cloud).'), george('yes')],
-    bash('gcloud sql instances execute-sql db --sql="DELETE FROM upwork_docs"'));
-});
-
-test('a saved scope approves nothing: any pin gives the same decision as none', () => {
+test('a saved scope approves nothing: any pin gives the same decision as none, and old pins are never read', () => {
   const cases = [
-    [[george('thanks')], MAIL_ANNA], [[reply(WILL_ANNA), george('yes')], MAIL_ANNA], [[reply(WILL_ANNA), george('yes')], MAIL_BOB],
-    [[george('send the mail to anna@example.com')], MAIL_ANNA], [[george('what next?')], MERGE_19], [[george('deploy the api now')], bash('gcloud run deploy api')],
+    [[george('thanks')], MAIL_ANNA], [[reply(WILL_ANNA), george('yes')], MAIL_ANNA], [[reply(WILL_ANNA), george('yes')], MERGE_19],
+    [[george('send the mail to anna@example.com')], MAIL_ANNA], [[george('what next?')], MERGE_19], [[george('deploy the api now')], DEPLOY],
+    [[george('yes')], MAIL_ANNA],
   ];
-  for (const [entries, call] of cases) {
-    const bare = scratch();
-    const pinned = scratch();
-    fs.mkdirSync(path.dirname(pinFile(pinned)), { recursive: true });
-    fs.writeFileSync(pinFile(pinned), 'Approved 2026-11-05 15:40 UTC\nI will: send the mail to anna@example.com and bob@example.com, merge Test-Kokonut/kokonut-rules#19.\n');
-    assert.strictEqual(decide(pinned, entries, call) === '', decide(bare, entries, call) === '', JSON.stringify(entries));
+  for (const pinText of ['Approved 2026-11-05 15:40 UTC\nI will: send the mail to anna@example.com, merge Test-Kokonut/kokonut-rules#19.\n', 'Purpose: p\nDone when:\n- d\n']) {
+    for (const [entries, call] of cases) {
+      const bare = scratch();
+      const pinned = scratch();
+      fs.mkdirSync(path.dirname(pinFile(pinned)), { recursive: true });
+      fs.writeFileSync(pinFile(pinned), pinText);
+      assert.strictEqual(decide(pinned, entries, call) === '', decide(bare, entries, call) === '', JSON.stringify(entries));
+    }
   }
 });
 
-test('parts: every call classify blocks has its parts, and a shell line has one per blocked command', () => {
-  const calls = [bash('rm -r dist'), bash('git push -f'), bash('gh pr merge 12'), bash("psql -c 'UPDATE jobs SET x=1'"),
-    bash('node /home/user/kokonut-status/scripts/status.js save page f --base 1'), MAIL_ANNA, SLACK, MERGE_19,
-    mcp('mcp__Upwork__upwork__search_help_center'), { tool_name: 'Artifact', tool_input: { action: 'delete', url: 'https://claude.ai/artifact/abc' } },
-    bash('git status'), mcp('mcp__Gmail__get_thread')];
-  for (const c of calls) assert.strictEqual(parts(c.tool_name, c.tool_input).length > 0, classify(c.tool_name, c.tool_input) !== '', c.tool_name + ' ' + JSON.stringify(c.tool_input));
-  assert.deepStrictEqual(parts('Bash', { command: 'rm -rf build && gcloud run deploy api' }).map((p) => p.label), ['deleting files', 'deploying']);
-  assert.strictEqual(parts('Bash', { command: 'git push -f' })[0].targets, null, 'no branch named: it cannot be verified');
-  assert.deepStrictEqual(parts('Bash', { command: "psql -c 'UPDATE jobs SET x=1'" })[0].targets[0].forms, ['jobs']);
+test("a helper is judged by the chat's transcript: George's order or yes there lets its blocked call pass", () => {
+  const dir = scratch();
+  transcript(dir, 'sess-1.jsonl', [reply('I will: deploy api.'), george('go')]);
+  const helper = transcript(dir, 'agent-2.jsonl', [george('Brief: deploy api and report back')]);
+  const input = Object.assign({ transcript_path: helper, agent_id: 'a2', session_id: 'sess-1' }, DEPLOY);
+  assert.strictEqual(refused(input, { home: dir }), '');
+  transcript(dir, 'sess-1.jsonl', [reply('I will: deploy api.'), george('go'), reply('done'), george('what did it cost?')]);
+  assert.match(refused(input, { home: dir }), /neither orders it nor says yes/);
 });
 
-// One regression test for each finding of the review of 5 Nov 2026 (2nd round), numbered as reported.
-test('review 1: a Gmail draft is sent as it is, so its recipients cannot be verified: refused', () => {
+test('any error refuses: a call the gate cannot read, a transcript it cannot read, input the hook cannot parse', () => {
   const dir = scratch();
-  const r = blocks(dir, [reply(WILL_ANNA), george('yes')], mcp('mcp__Gmail__send_message', { to: ['anna@example.com'], draftId: 'r-123' }));
-  assert.match(r, /cannot verify what this acts on \(it sends a draft/);
-  blocks(dir, [george('send the draft mail now')], mcp('mcp__Gmail__send_message', { draftId: 'r-123' }));
-  blocks(dir, [reply(WILL_ANNA), george('yes')], mcp('mcp__Gmail__send_message', { subject: 'x' }), 'no recipient at all');
-});
-
-test('review 2: a Drive share names its file, its role and exactly who; anyone with the link or a Chat space must be named', () => {
-  const dir = scratch();
-  const WILL = [reply('I will: share the Drive file 1abcFILE with anna@example.com as reader.'), george('yes')];
-  const share = (extra) => mcp('mcp__Google_Drive__share_file', Object.assign({ fileId: '1abcFILE', role: 'reader' }, extra));
-  passes(dir, WILL, share({ emailAddress: 'anna@example.com' }));
-  blocks(dir, WILL, share({ permissionId: 'anyoneWithLink' }), 'public link');
-  blocks(dir, WILL, share({ chatSpaceId: 'spaces/AAA' }), 'a Chat space');
-  blocks(dir, WILL, share({ emailAddress: 'anna@example.com', role: 'writer' }), 'a higher role');
-  blocks(dir, WILL, share({ emailAddress: 'anna@example.com', permissionId: 'anyoneWithLink' }), 'two audiences');
-  passes(dir, [reply('I will: share the Drive file 1abcFILE with anyone with the link as reader.'), george('yes')], share({ permissionId: 'anyoneWithLink' }));
-});
-
-test('review 3: a refusal word anywhere in a sentence, before or after a comma, makes the sentence approve nothing', () => {
-  const dir = scratch();
-  blocks(dir, [george('Never, ever send the mail to bob@example.com')], MAIL_BOB);
-  blocks(dir, [george('Do not, under any circumstances, send the mail to bob@example.com')], MAIL_BOB);
-  blocks(dir, [reply('I will: delete the old branches on GitHub, not main.'), george('yes')], bash('git push origin --delete main'));
-});
-
-test('review 4: naming the thing is not doing it: "check the mail" does not send mail, "read the Slack channel" does not post', () => {
-  const dir = scratch();
-  blocks(dir, [george('check the mail from anna@example.com and tell me what she wants')], MAIL_ANNA);
-  blocks(dir, [george('read the Slack channel C0CC8QCFVJQ and summarise it')], SLACK);
-  passes(dir, [george('post the summary on Slack in C0CC8QCFVJQ')], SLACK);
-});
-
-test('review 5: the action and its targets must be in one sentence: two approvals never combine into a third', () => {
-  const dir = scratch();
-  blocks(dir, [reply('I will: send the mail to anna@example.com.\nI will: post bob@example.com notes on Slack.'), george('yes')], MAIL_BOB);
-  blocks(dir, [george('Read the mail. Then post the summary for bob@example.com on Slack')], MAIL_BOB);
-  blocks(dir, [george('Send the mail. It goes to anna@example.com')], MAIL_ANNA, 'target in another sentence');
-});
-
-test('review 6: no short form: a local part, a base name, a last table segment or a repo without its owner names nothing', () => {
-  const dir = scratch();
-  blocks(dir, [reply(WILL_ANNA), george('yes')], mcp('mcp__Gmail__send_message', { to: ['anna@other.com'] }));
-  passes(dir, [reply('I will: delete the folder /home/user/a/build.'), george('yes')], bash('rm -rf /home/user/a/build'));
-  blocks(dir, [reply('I will: delete the folder /home/user/a/build.'), george('yes')], bash('rm -rf /srv/build'));
-  blocks(dir, [reply('I will: delete the folder /home/user/a/build.'), george('yes')], bash('rm -rf build'));
-  passes(dir, [george('remove the bigquery table ds.old_runs')], bash('bq rm -f -t ds.old_runs'));
-  blocks(dir, [george('remove the bigquery table ds.old_runs')], bash('bq rm -f -t prod.old_runs'));
-  blocks(dir, [reply('I will: merge kokonut-rules#19.'), george('yes')], MERGE_19, 'no owner');
-  blocks(dir, [reply('I will: merge Test-Kokonut/kokonut-rules#19.'), george('yes')],
-    mcp('mcp__github__merge_pull_request', { owner: 'Other', repo: 'kokonut-rules', pullNumber: 19 }), 'another owner');
-});
-
-test('review 7: a hyphen or a dot joins a name: approving "old-feature" or "api-gateway" names neither "old" nor "api"', () => {
-  const dir = scratch();
-  blocks(dir, [reply('I will: delete the branch old-feature on GitHub.'), george('yes')], bash('git push origin --delete old'));
-  passes(dir, [reply('I will: delete the branch old-feature on GitHub.'), george('yes')], bash('git push origin --delete old-feature'));
-  blocks(dir, [george('deploy api-gateway now')], bash('gcloud run deploy api'));
-  blocks(dir, [george('deploy api.v2 now')], bash('gcloud run deploy api'));
-});
-
-test('review 8: calendar guests added or removed and reply recipients are targets; reply-all cannot be verified', () => {
-  const dir = scratch();
-  const WILL = [reply('I will: move the calendar event ev123 to 10:00.'), george('yes')];
-  passes(dir, WILL, mcp('mcp__Google_Calendar__update_event', { eventId: 'ev123', startTime: '2026-11-06T10:00:00' }));
-  blocks(dir, WILL, mcp('mcp__Google_Calendar__update_event', { eventId: 'ev123', addedAttendees: [{ email: 'x@evil.com' }] }));
-  blocks(dir, WILL, mcp('mcp__Google_Calendar__update_event', { eventId: 'ev123', removedAttendeeEmails: ['bob@example.com'] }));
-  const REPLY = [reply('I will: reply to the mail from anna@example.com.'), george('yes')];
-  passes(dir, REPLY, mcp('mcp__Gmail__reply', { messageId: 'm1', to: ['anna@example.com'], body: 'x' }));
-  blocks(dir, REPLY, mcp('mcp__Gmail__reply', { messageId: 'm1', to: ['anna@example.com'], replyAll: true, body: 'x' }));
-  blocks(dir, REPLY, mcp('mcp__Gmail__reply', { messageId: 'm1', body: 'x' }), 'recipients the gate cannot see');
-});
-
-test('review 9: a pasted notification, a long message or one of more than three lines is no order', () => {
-  const dir = scratch();
-  blocks(dir, [george('GitHub\nMerge pull request Test-Kokonut/kokonut-rules#19 from claude/x\nView it on GitHub')], MERGE_19);
-  blocks(dir, [george('From: notifications@github.com\nmerge Test-Kokonut/kokonut-rules#19')], MERGE_19);
-  blocks(dir, [george('a\nb\nc\nmerge Test-Kokonut/kokonut-rules#19')], MERGE_19, 'four lines');
-  blocks(dir, [george(`merge Test-Kokonut/kokonut-rules#19 ${'and more words '.repeat(20)}`)], MERGE_19, 'over 60 words');
-  passes(dir, [george('merge Test-Kokonut/kokonut-rules#19')], MERGE_19);
-});
-
-test('review 10: not broadened for the daily refresh: a standing prompt cannot delete page files it never names', () => {
-  const dir = scratch();
-  const prompt = 'Daily refresh of the "Kokonut Pillar Status" dashboard. Refresh the data of the page https://claude.ai/artifact/Xegfng7iZVfCPXqi9thdvJ. ' +
-    '11. Old files: delete (Artifact action "delete", url above, path "<id>") only files uploaded more than 7 days before now. ' + 'More steps. '.repeat(20);
-  const del = { tool_name: 'Artifact', tool_input: { action: 'delete', url: 'https://claude.ai/artifact/Xegfng7iZVfCPXqi9thdvJ', path: '0123456789abcdef0123456789abcdef' } };
-  blocks(dir, [george(prompt)], del);
-  blocks(dir, [george('delete the old files of the page https://claude.ai/artifact/Xegfng7iZVfCPXqi9thdvJ')], del, 'the file is not named');
-  passes(dir, [reply('I will: delete the file 0123456789abcdef0123456789abcdef of the page https://claude.ai/artifact/Xegfng7iZVfCPXqi9thdvJ.'), george('yes')], del);
-});
-
-test('review 12: a call whose target the gate cannot read is refused, whatever was approved', () => {
-  const dir = scratch();
-  const UPWORK = mcp('mcp__Upwork__upwork__search_help_center', { query: 'fees' });
-  blocks(dir, [george('use the Upwork connector')], UPWORK, 'no tool named');
-  passes(dir, [reply('I will: use the Upwork connector search_help_center to look up fees.'), george('yes')], UPWORK);
-  assert.match(blocks(dir, [reply('I will: force-push the branch on GitHub.'), george('yes')], bash('git push -f')), /cannot verify/);
-  const DESTROY = bash('gcloud secrets versions destroy 3 --secret=api-key');
-  blocks(dir, [reply('I will: change the Google Cloud secret api-key.'), george('yes')], DESTROY, 'the command is not named');
-  passes(dir, [reply('I will: run `gcloud secrets versions destroy 3 --secret=api-key` (changing Google Cloud).'), george('yes')], DESTROY);
-  blocks(dir, [reply('I will: trash the mail thread.'), george('yes')], mcp('mcp__Gmail__trash_thread', {}), 'no thread id');
-  blocks(dir, [george('merge it')], bash('gh pr merge 12'), 'no repository');
-  passes(dir, [george('merge Test-Kokonut/kokonut-rules#12')], bash('gh pr merge 12 --repo Test-Kokonut/kokonut-rules'));
-});
-
-test('review 13: any error while checking blocks the call; so does input the hook cannot read', () => {
-  const dir = scratch();
-  const loop = {};
-  loop.email = loop;
-  blocks(dir, [reply(WILL_ANNA), george('yes')], mcp('mcp__Gmail__send_message', { to: [loop] }), 'a recipient that refers to itself');
-  const boom = { get to() { throw new Error('boom'); } };
-  assert.match(blocks(dir, [reply(WILL_ANNA), george('yes')], mcp('mcp__Gmail__send_message', boom)), /could not check this call \(boom\)/);
-  assert.match(refused(null), /^Blocked/);
+  const boom = { get command() { throw new Error('boom'); } };
+  assert.match(decide(dir, [george('deploy the api now')], { tool_name: 'Bash', tool_input: boom }), /^Blocked: the gate could not check this call \(boom\)\. Nothing ran\.$/);
+  assert.match(refused(null), /^Blocked: the gate got no tool call/);
+  assert.match(refused(Object.assign({ transcript_path: dir }, DEPLOY), { home: dir }), /^Blocked \(deploying\)/, 'a folder as the transcript: no message read');
   const env = { HOME: dir, USERPROFILE: dir };
   const bad = runHook(HOOK, '{broken', env);
   assert.strictEqual(bad.status, 0);
-  assert.strictEqual(JSON.parse(bad.stdout).hookSpecificOutput.permissionDecision, 'deny');
+  assert.match(JSON.parse(bad.stdout).hookSpecificOutput.permissionDecisionReason, /could not read the tool call/);
+  const none = runHook(HOOK, '', env);
+  assert.strictEqual(JSON.parse(none.stdout).hookSpecificOutput.permissionDecision, 'deny');
 });
 
-test('review 14: bq cp checks the table it writes as well as the one it reads', () => {
+// A standing prompt (a scheduled task's) arrives as a message in George's name: the gate reads it as his, and it
+// passes the kind of step a sentence of it orders without saying no. The permission it carries is the one he gave
+// when he set the task up; the gate cannot check that. The real prompts are replayed outside the tests (they hold
+// private ids): see the pull request.
+test("a standing prompt passes the kind of step it orders in a sentence that says no 'no', and nothing else", () => {
   const dir = scratch();
-  blocks(dir, [george('copy the bigquery table ds.a')], bash('bq cp ds.a prod.important'));
-  passes(dir, [george('copy the bigquery table ds.a to prod.important')], bash('bq cp ds.a prod.important'));
+  const prompt = 'Weekly run George set on 26 Oct. He approved posting this one summary to the channel, so post it without asking.\n' +
+    '1. Run exactly one search. Never list, search, open or read any other email.\n' +
+    '3. Slack: read the last 20 messages of C0CC8QCFVJQ (last week\'s summary).\n' +
+    '5. Post ONE message to C0CC8QCFVJQ. Super plain, brief and clear.\n' +
+    '6. Change nothing else: no archiving, labels, deleting or replies; nothing in Google Cloud or any repo.';
+  passes(dir, [george(prompt)], SLACK);
+  blocks(dir, [george(prompt)], DEPLOY, 'no sentence orders a deploy');
+  blocks(dir, [george(prompt)], { tool_name: 'Artifact', tool_input: { action: 'delete', url: 'https://claude.ai/artifact/x' } }, 'the only such sentence says no');
+  blocks(dir, [george(prompt + '\nAnything unclear? Ask.')], SLACK, 'a prompt with a question mark is a question, as any message');
 });
 
-test('review 15: a refusal always names what the approval must name', () => {
+test('today versus this branch: every step this gate newly allows was blocked by the old gate only for missing Purpose lines', () => {
+  // The old gate (main, with its Purpose pin in place): George's last message is a yes, or holds the action's word
+  // and no question mark. The new gate must never allow what that one blocked.
+  const { isYes } = require('../.claude/hooks/transcript.js');
+  const lastText = (entries) => entries.filter((e) => typeof e.message.content === 'string').map((e) => e.message.content).pop() || '';
+  const oldAllows = (label, last) => isYes(last) || (!last.includes('?') && Boolean(ORDER[label] && ORDER[label].test(last)));
+  const cases = [
+    [[george('deploy the api now')], DEPLOY], [[george('send the mail to anna@example.com')], MAIL_ANNA], [[george('clean the build folder')], bash('rm -rf build')],
+    [[reply('I will: deploy api.'), george('yes')], DEPLOY], [[reply(WILL_ANNA), george('yes')], MAIL_ANNA], [[reply(WILL_ANNA), george('yes')], MERGE_19],
+    [[reply('✅ Sure.'), george('yes')], MAIL_ANNA], [[george('yes')], MAIL_ANNA], [[george('send it?')], MAIL_ANNA], [[george("don't send the mail to anna@example.com")], MAIL_ANNA],
+    [[george('Tell it: "merge Test-Kokonut/kokonut-rules#19"')], MERGE_19], [[george('> send the mail to anna@example.com')], MAIL_ANNA],
+    [[george('Remove the hand-over entirely')], MERGE_19], [[george('thanks')], MAIL_ANNA], [[george("Don't touch the sheet. Mail Anna the new time.")], MAIL_ANNA],
+  ];
+  const stricter = [];
+  for (const [entries, call] of cases) {
+    const dir = scratch();
+    const now = decide(dir, entries, call) === '';
+    const before = oldAllows(classify(call.tool_name, call.tool_input), lastText(entries));
+    assert.ok(!now || before, `newly allowed, never allowed before: ${JSON.stringify(entries)}`);
+    if (before && !now) stricter.push(lastText(entries));
+  }
+  assert.deepStrictEqual(stricter, ['yes', 'yes', 'yes', "don't send the mail to anna@example.com", 'Tell it: "merge Test-Kokonut/kokonut-rules#19"', '> send the mail to anna@example.com']);
+});
+
+// The gate's known limits, written out so that nobody reads it as proof of approval. Each is a decision rule 12
+// leaves to the chat, or a gap that exists today; none is a bug a later change silently "fixes" into a wider gate.
+test('known limits, written out: targets, repeats, untagged pastes, command forms and tools it does not read', () => {
   const dir = scratch();
-  const r = blocks(dir, [reply('I will: send the mail to anna@example.com.\nI will: send the mail to bob@example.com.'), george('yes')], MAIL_BOTH);
-  assert.match(r, /together with anna@example\.com, bob@example\.com\. Reply one line, "I will: <what, where>" naming anna@example\.com, bob@example\.com, and wait\./);
+  passes(dir, [george("Don't mail Bob. Mail Anna the new time.")], MAIL_BOB, 'which recipient: not read; the chat keeps to what the order named');
+  passes(dir, [george('deploy the api now')], bash('gcloud run deploy web --project other'), 'which service or project: not read');
+  passes(dir, [george('1. Gmail: run exactly one search.\n5. Post the summary on Slack.')], MAIL_ANNA, 'a sentence that names mail for reading passes a send');
+  passes(dir, [reply(WILL_ANNA), george('yes')], MAIL_ANNA);
+  passes(dir, [reply(WILL_ANNA), george('yes')], MAIL_ANNA, 'a repeat in the same turn: not told from a retry');
+  passes(dir, [george('GitHub\nMerge pull request Test-Kokonut/kokonut-rules#19 from claude/x\nView it on GitHub')], MERGE_19, 'an untagged paste is read as his message (rule 13 is the chat\'s)');
+  for (const command of ['git -C /home/user/x push --force origin main', 'bash -c "rm -rf /home/user/x"', 'git clean -fdx', 'gcloud --project p run deploy api']) {
+    assert.strictEqual(classify('Bash', { command }), '', `a command form the gate does not read: ${command}`);
+  }
+  assert.strictEqual(classify('mcp__Webflow__data_pages_tool', {}), '', 'a connector tool not on its list');
 });
 
 test('as the hook: a refusal is a deny decision with the reason; a pass prints nothing', () => {
@@ -403,4 +312,7 @@ test('as the hook: a refusal is a deny decision with the reason; a pass prints n
   const pass = runHook(HOOK, Object.assign({ transcript_path: file, session_id: 's' }, bash('git status')), env);
   assert.strictEqual(pass.status, 0);
   assert.strictEqual(pass.stdout, '');
+  const order = transcript(dir, 'o.jsonl', [george('post it on Slack in C0CC8QCFVJQ')]);
+  const ok = runHook(HOOK, Object.assign({ transcript_path: order, session_id: 'o' }, SLACK), env);
+  assert.strictEqual(ok.stdout, '');
 });

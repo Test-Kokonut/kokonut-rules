@@ -27,7 +27,7 @@ test('no line is longer than 120 characters; a wrapped line goes on indented', (
 test('the rules the hooks enforce are written: the pin (rule 9) and the yes before a shared change (rule 12)', () => {
   assert.match(text, /"Purpose:" and "Done when:"/, 'rule 9 names the two lines purpose.js pins');
   assert.match(text, /"I will: …"/, 'rule 12 names the one line the gate asks for');
-  assert.match(text, /The gate blocks it otherwise/, 'rule 12 says the gate blocks');
+  assert.match(text, /The gate blocks a step that no such message/, 'rule 12 says the gate blocks');
 });
 
 test('rule 9 shows the two lines only on ask or unclear scope, rule 12 limits an approval to what it names, and the reminder points to rule 9', () => {
@@ -42,9 +42,9 @@ test('rule 9 shows the two lines only on ask or unclear scope, rule 12 limits an
   assert.match(rule9, /only when he asks or when unclear scope needs his decision/);
   assert.doesNotMatch(rule9, /gated step/, 'no routine lines before a shared step: the gate does not need them');
   const rule12 = rule(12);
-  assert.match(rule12, /An approval covers only the actions and exact targets one sentence of it names/);
-  assert.match(rule12, /a saved scope approves nothing/);
-  assert.match(rule12, /what the gate cannot verify, it refuses/);
+  assert.match(rule12, /A clear order is the approval: do only what it names/);
+  assert.match(rule12, /never ask twice, run it once/);
+  assert.match(rule12, /a backstop, not proof of approval/);
   const { NOT_PINNED } = require('../.claude/hooks/purpose.js');
   assert.match(NOT_PINNED, /Rule 9 says when/, 'the reminder points to rule 9');
   assert.doesNotMatch(NOT_PINNED, /gated step|unclear scope/, 'the reminder does not restate rule 9');
