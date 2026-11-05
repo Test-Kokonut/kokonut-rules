@@ -180,15 +180,16 @@ function classify(toolName, toolInput) {
 // ---- What approves a call: George's last message. ----
 // His approvals, from his last message in the chat's transcript: [{ how: 'yes' | 'order', text, record }].
 //   yes:    his message is a yes (transcript.js isYes) to the reply right before it, and that reply holds "I will:"
-//           lines (WILL: whatever icon, bullet, number or bold comes before the words; the steps may stand as a
-//           list under a bare "I will:"), not in a fenced block, a blockquote or a comment: those lines.
+//           lines (WILL: whatever icon, bullet, number or bold comes before the words; "I will delete …" with no
+//           colon counts too; the steps may stand as a list under a bare "I will:"), not in a fenced block, a
+//           blockquote or a comment, and not saying no: those lines.
 //   order:  each sentence of his message outside quotes, pastes, fences, blockquotes and comments that does not
 //           say no (transcript.js saysNo). Lines are joined until one ends a sentence; a list under a line that
 //           says no and ends with ":" is no. A message with a question mark is a question, never an order.
 // An approval covers a kind of action when it names it with the action's own words (ORDER); an "I will:" line may
 // name it by its label too ("changing Google Cloud"). record: the text the pin keeps for the chat.
 const QUESTION = /[?？¿‽]/;
-const WILL = /^\s*(?:\d+[.)]\s*)?[^A-Za-z0-9]*I will\**\s*:\**\s*(.*)$/i;
+const WILL = /^\s*(?:\d+[.)]\s*)?[^A-Za-z0-9]*I will\**(?:\s*:\**\s*|\s+)(.*)$/i;
 const ITEM = /^\s*(?:[-*•·]|\d+[.)])\s+(.+)$/;
 const ENDS = /[.!?;:]$/;
 const SPLIT = /(?:[.!;](?=\s|$))+/;
@@ -243,7 +244,7 @@ function willLines(reply) {
       for (let j = i + 1; j < lines.length; j++) { const it = ITEM.exec(lines[j]); if (!it) break; items.push(it[1].trim()); }
       text = items.join('; ');
     }
-    if (text) out.push(text);
+    if (text && !saysNo(text)) out.push(text); // "I will not send it" names nothing
   }
   return out;
 }

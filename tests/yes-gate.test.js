@@ -203,7 +203,10 @@ test('the "I will:" line in every usual form: an icon, bold around or inside, a 
     '- I will : deploy api.', 'i will: deploy api']) passes(dir, [reply(line), george('yes')], DEPLOY, line);
   passes(dir, [reply('I will:\n- deploy api\n- send the mail to anna@example.com'), george('yes')], DEPLOY, 'a list under a bare line');
   passes(dir, [reply('I will:\n- deploy api\n- send the mail to anna@example.com'), george('yes')], MAIL_ANNA);
-  blocks(dir, [reply('I will deploy api.'), george('yes')], DEPLOY, 'no colon: not the line');
+  passes(dir, [reply('👉 I will deploy the api and everything with it. **Yes?**'), george('yes')], DEPLOY, 'no colon: the line all the same');
+  blocks(dir, [reply('I will not deploy api yet.'), george('yes')], DEPLOY, 'a line that says no names nothing');
+  blocks(dir, [reply('I will: deploy api, not web.'), george('yes')], DEPLOY, 'a line that says no names nothing, colon or not');
+  blocks(dir, [reply('Later I will deploy api.'), george('yes')], DEPLOY, 'not at the start of a line: not the line');
 });
 
 test('questions approve nothing: not as an order, not as a yes, with any question mark', () => {
