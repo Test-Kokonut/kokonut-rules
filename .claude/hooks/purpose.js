@@ -24,6 +24,8 @@ const NOT_PINNED = 'No Purpose and Done when pinned. Rule 9 says when to show th
 const PINNED_HEAD = 'Last scope George approved (it approves nothing new; never repeat it to George; keep the current ' +
   'job\'s scope, rule 9):';
 const MAX_PIN = 600; // characters of an approval kept in the pin
+// What looks like a key or token: a known prefix, or 24 or more letters and digits mixed in one word.
+const SECRET = /\b(?:sk|ghp|gho|ghs|github_pat|AIza|xox[abps]|ya29|AKIA)[A-Za-z0-9_\-.]{8,}|\b(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Za-z])[A-Za-z0-9_-]{24,}\b/g;
 // The two lines, whatever comes before the word: an icon, a bullet, bold marks ("👉 **Purpose:** ...").
 const PURPOSE = /^[^A-Za-z0-9]*Purpose\**\s*:\**\s*(.*)$/i;
 const DONE = /^[^A-Za-z0-9]*Done when\**\s*:\**\s*(.*)$/i;
@@ -69,7 +71,7 @@ function stamp(now) {
 // Writes an approved scope as the pin, with its time; the same scope again keeps its first time. true when the pin
 // holds it. For this hook (his yes to Purpose and Done when) and for yes-gate.js (a step it let pass).
 function recordApproval(text, home, now) {
-  let body = String(text || '').trim();
+  let body = String(text || '').replace(SECRET, '[hidden]').trim(); // never a key into a file (rule 14)
   if (!body) return false;
   if (body.length > MAX_PIN) body = Array.from(body).slice(0, MAX_PIN).join('').trimEnd() + ' …';
   const file = pinFile(home);

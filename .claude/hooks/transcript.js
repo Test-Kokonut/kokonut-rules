@@ -10,8 +10,9 @@
 // George's message: a user entry of the main chat (not isSidechain, not isMeta) whose content is a string or text
 // blocks only (a tool result is not his), and whose text does not start like something the cloud, a hook, a helper
 // or another chat put there (INJECTED below). So a message of his own that starts with <, [ or { is passed over.
-// The reply his message answers (lastExchange): the main chat's texts right before it, back to the last entry that
-// is not the chat's own (a tool result, a message of anyone's); an earlier reply of the same turn does not count.
+// The reply his message answers (lastExchange): the main chat's texts right before it, back to the last user entry
+// (a tool result, a message of anyone's); the app's own entries between are passed over; an earlier reply of the
+// same turn does not count.
 // A yes: his message starts with a yes word (YES below: yes, ok, go, do it, agree, merge it, deploy it, ...; a bare
 // order like "merge 6" or "send the mail" is not a yes: yes-gate.js reads orders by their own words), is at
 // most 12 words, and the rest of it holds no doubt (but, why, what, how, which, a question mark) and no "no" (NO
@@ -33,7 +34,7 @@ const YES = /^(?:yes|y|yep|yeah|yup|ok|okay|k|kk|go|go ahead|do it|do that|do so
 const NO_WORDS = 'no|not|never|nothing|none|nope|nah|nevermind|cannot|wait|hold|skip|except|unless|later|dont|cant|wont|isnt|doesnt|didnt|wouldnt|shouldnt|couldnt';
 const NO = new RegExp(`\\b(?:${NO_WORDS})\\b|n['\`]t\\b`, 'i');
 const HALT = /\b(?:stop|cancel)\b/i;
-const HALT_START = /^[^A-Za-z0-9]*(?:stop|cancel)\b/i;
+const HALT_START = /^\s*(?:\d+[.)]\s*)?[^A-Za-z0-9]*(?:stop|cancel)\b/i;
 const NOT_YES = new RegExp(`\\b(?:but|why|what|how|which|stop|cancel|${NO_WORDS})\\b|n['\`]t\\b|[?？¿‽]`, 'i');
 
 // A text as read: no zero-width characters, curly quotes and apostrophes made plain, no carriage returns.
@@ -108,7 +109,9 @@ function lastExchange(file) {
     if (i < 0) return null;
     const reply = [];
     let j = i - 1;
-    while (j >= 0 && (isMainReply(es[j]) || (es[j] && es[j].isSidechain))) { // a helper's lines are passed over
+    // Back to the last user entry (a tool result, a message of anyone's); the app's own entries (system,
+    // queue-operation) and a helper's lines are passed over.
+    while (j >= 0 && (!es[j] || es[j].type !== 'user' || es[j].isSidechain)) {
       if (isMainAssistant(es[j])) reply.unshift(textOf(es[j]).trim());
       j--;
     }

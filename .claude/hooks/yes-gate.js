@@ -14,10 +14,11 @@
 // What lets a blocked call pass: George's last message in the chat's transcript (a helper is judged by the chat's
 // transcript, mainTranscript) orders that kind of action, or is his yes to an "I will:" line that names it. An
 // order names the action with the action's own words (ORDER below: "mail" for a mail, "merge" for a merge, "sheet"
-// for a Sheet, ...) in a sentence that does not say no (transcript.js saysNo); his yes (transcript.js isYes)
-// answers the reply right before it, and that reply's "I will:" lines name the action by those words or by its
-// label. A word match, nothing read into his words. A message with a question mark is a question, never an order;
-// text in quotes ("…", '…', «…», `…`), a pasted block, a fenced block, a blockquote line or a comment is not his.
+// for a Sheet, ...) in a sentence that does not say no (transcript.js saysNo); a message of up to 150 words that
+// says no anywhere orders nothing; his yes (transcript.js isYes) answers the reply right before it, and that
+// reply's "I will:" lines name the action by those words or by its label. A word match, nothing read into his
+// words. A message with a question mark is a question, never an order; text in quotes ("…", '…', «…», `…`), a
+// pasted block, a fenced block, a blockquote line or a comment is not his.
 // After that message, every call in the turn that it covers passes: his next message ends it. Any error while
 // checking, the hook's own included, refuses: a transcript it cannot read, input it cannot parse or that does not
 // arrive within 3 s, a sibling file that fails to load.
@@ -26,7 +27,8 @@
 // same turn; whether an untagged paste or a scheduled task's prompt is George's own message; a message of his
 // that starts with <, [ or { (read as the cloud's and passed over); commands in forms classify does not read
 // (git -C, a shell inside a shell) and connector tools not in MCP; a sentence that says no with words not in the
-// list (transcript.js NO); an order's word used for another purpose ("check the mail" names mail).
+// list (transcript.js NO), or, in a message over 150 words, a no whose reach a sentence split loses; an order's
+// word used for another purpose ("check the mail" names mail).
 // The pin (purpose.js's file) is never read here: a saved scope approves nothing. A call that passes has its
 // approval written there (purpose.js recordApproval), so the chat sees the last thing he approved and when.
 // Output on a refusal: {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
@@ -180,16 +182,21 @@ function classify(toolName, toolInput) {
 // ---- What approves a call: George's last message. ----
 // His approvals, from his last message in the chat's transcript: [{ how: 'yes' | 'order', text, record }].
 //   yes:    his message is a yes (transcript.js isYes) to the reply right before it, and that reply holds "I will:"
-//           lines (WILL: whatever icon, bullet, number or bold comes before the words; "I will delete …" with no
-//           colon counts too; the steps may stand as a list under a bare "I will:"), not in a fenced block, a
-//           blockquote or a comment, and not saying no: those lines.
-//   order:  each sentence of his message outside quotes, pastes, fences, blockquotes and comments that does not
-//           say no (transcript.js saysNo). Lines are joined until one ends a sentence; a list under a line that
-//           says no and ends with ":" is no. A message with a question mark is a question, never an order.
+//           lines (WILL: whatever icon, bullet, number or bold comes before the words; "I will delete … Yes?" with
+//           no colon counts when the line ends by asking; the steps may stand as a list under a bare "I will:"),
+//           not in a fenced block, a blockquote or a comment, and not saying no: each such line.
+//   order:  a message of up to SHORT words that says no anywhere (transcript.js saysNo) orders nothing; otherwise
+//           each sentence of his message outside quotes, pastes, fences, blockquotes and comments that does not
+//           say no. Lines are joined until one ends a sentence; a list under a line that says no and ends with ":"
+//           is no. A message with a question mark is a question, never an order.
 // An approval covers a kind of action when it names it with the action's own words (ORDER); an "I will:" line may
-// name it by its label too ("changing Google Cloud"). record: the text the pin keeps for the chat.
+// name it by its label too ("changing Google Cloud"). record: the text the pin keeps for the chat (the "I will:"
+// lines, or the sentences of his order that name a kind of action).
 const QUESTION = /[?？¿‽]/;
-const WILL = /^\s*(?:\d+[.)]\s*)?[^A-Za-z0-9]*I will\**(?:\s*:\**\s*|\s+)(.*)$/i;
+const SHORT = 150; // words: a message up to this long that says no anywhere orders nothing; a longer one (a standing prompt) is read sentence by sentence
+const WILL = /^\s*(?:\d+[.)]\s*)?[^A-Za-z0-9]*I will\**\s*:\**\s*(.*)$/i;
+const WILL_BARE = /^\s*(?:\d+[.)]\s*)?[^A-Za-z0-9]*I will\s+(.+?)\s*[?？]\s*\**\s*$/i; // no colon: only a line that ends by asking
+const ABBREVIATION = /\b(e\.g|i\.e|etc|vs|approx)\./gi;
 const ITEM = /^\s*(?:[-*•·]|\d+[.)])\s+(.+)$/;
 const ENDS = /[.!?;:]$/;
 const SPLIT = /(?:[.!;](?=\s|$))+/;
@@ -219,7 +226,7 @@ function sentences(text) {
     for (const s of buf.split(SPLIT)) { const t = s.trim(); if (t && !saysNo(t)) out.push(t); }
     buf = '';
   };
-  for (const raw of String(text || '').split('\n')) {
+  for (const raw of String(text || '').replace(ABBREVIATION, '$1').split('\n')) {
     const line = raw.trim();
     if (!line) { flush(); skipping = false; continue; }
     if (ITEM.test(line)) { if (!skipping) { flush(); buf = line; } continue; }
@@ -236,7 +243,7 @@ function willLines(reply) {
   const lines = plain(reply).replace(COMMENT, '\n').replace(FENCE, '\n').split('\n').filter((l) => !/^\s*>/.test(l));
   const out = [];
   for (let i = 0; i < lines.length; i++) {
-    const m = WILL.exec(lines[i]);
+    const m = WILL.exec(lines[i]) || WILL_BARE.exec(lines[i]);
     if (!m) continue;
     let text = m[1].replace(/^[*_\s]+/, '').trim();
     if (!text) {
@@ -256,11 +263,16 @@ function approvals(main) {
   const out = [];
   if (isYes(george)) {
     const lines = willLines(x.reply);
-    if (lines.length) out.push({ how: 'yes', text: lines.join('\n'), record: lines.join('\n') });
+    for (const line of lines) out.push({ how: 'yes', text: line, record: lines.join('\n') });
   }
   if (george && !QUESTION.test(george)) {
     const own = unquoted(george);
-    for (const s of sentences(own)) out.push({ how: 'order', text: s, record: own.replace(/\s+/g, ' ').trim() });
+    const short = george.split(/\s+/).filter(Boolean).length <= SHORT;
+    if (!(short && saysNo(own))) {
+      const ordered = sentences(own);
+      const record = ordered.filter((s) => Object.values(ORDER).some((re) => re.test(s))).join(' ');
+      for (const s of ordered) out.push({ how: 'order', text: s, record });
+    }
   }
   return out;
 }

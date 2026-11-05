@@ -45,7 +45,7 @@ test('says no: no, not, never, nothing, n\'t in every spelling, wait, hold, skip
     'mail Anna later', 'ok, stop', 'yes, cancel that', 'n​o, mail Anna', 'Never, ever mail Anna', 'nope, mail Anna', 'nah']) {
     assert.strictEqual(saysNo(s), true, s);
   }
-  for (const s of ['mail Anna the new time', 'Stop the daily job', 'Cancel the meeting with Anna', 'deploy the api now', 'merge it', 'nobody minds', 'notify Anna']) {
+  for (const s of ['mail Anna the new time', 'Stop the daily job', 'Cancel the meeting with Anna', '1) Cancel the meeting with Anna', '- Stop the job', 'deploy the api now', 'merge it', 'nobody minds', 'notify Anna']) {
     assert.strictEqual(saysNo(s), false, s);
   }
 });
@@ -82,6 +82,9 @@ test("the last exchange: George's last message and the chat's texts right before
   const cut = transcript(dir, 'c.jsonl', [george('fix it'), reply('I will: merge #19. Ok?'), george('<task-notification>done</task-notification>'),
     reply('The helper found 3 failing tests. Fix them first?'), george('yes')]);
   assert.deepStrictEqual(lastExchange(cut), { george: 'yes', reply: 'The helper found 3 failing tests. Fix them first?' }, 'an injected entry ends the reply');
+  const app = transcript(dir, 'a.jsonl', [george('go'), reply('I will: deploy api.'), { type: 'system', subtype: 'stop_hook_summary' }, { type: 'queue-operation', operation: 'enqueue' },
+    { type: 'queue-operation', operation: 'dequeue' }, george('yes')]);
+  assert.deepStrictEqual(lastExchange(app), { george: 'yes', reply: 'I will: deploy api.' }, "the app's own entries between are passed over");
   const first = transcript(dir, 'y.jsonl', [george('yes')]);
   assert.deepStrictEqual(lastExchange(first), { george: 'yes', reply: '' }, 'a yes that answers no reply');
   assert.strictEqual(lastExchange(path.join(dir, 'none.jsonl')), null, 'a file that cannot be read');

@@ -88,6 +88,13 @@ test('review 11: a pin from before the change (no "Approved" line, often set wit
   assert.strictEqual(fs.readFileSync(pinFile(dir), 'utf8'), STAMP + PINNED);
 });
 
+test('recordApproval: what looks like a key is never written (rule 14)', () => {
+  const dir = scratch();
+  recordApproval('deploy the api with KEY=sk-live-AAAA1234567890abcd now, token ghp_abcdefghijklmnop12345, id 0123456789abcdef0123456789abcdef', dir, NOW);
+  const body = fs.readFileSync(pinFile(dir), 'utf8');
+  assert.strictEqual(body, STAMP + 'deploy the api with KEY=[hidden] now, token [hidden], id [hidden]\n');
+});
+
 test('recordApproval: a long approval is cut whole, never inside a character', () => {
   const dir = scratch();
   const text = 'x'.repeat(599) + '😀 and more';

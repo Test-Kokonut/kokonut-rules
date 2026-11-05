@@ -135,6 +135,7 @@ test('a clear order runs the step: no Purpose lines, no pin, no second question,
     ['update the sheet with the October numbers', mcp('mcp__Google_Sheets__update_values', { spreadsheetId: 'x', range: 'A1', values: [[1]] })],
     ['book the meeting with Anna on Monday at 10', mcp('mcp__Google_Calendar__create_event', { summary: 'Anna' })],
     ['cancel the meeting with Anna', mcp('mcp__Google_Calendar__delete_event', { eventId: 'ev1' })],
+    ['1) Cancel the meeting with Anna', mcp('mcp__Google_Calendar__delete_event', { eventId: 'ev1' })],
     ['merge Test-Kokonut/kokonut-rules#19', MERGE_19],
     ['approve Test-Kokonut/kokonut-rules#19 with a review', REVIEW_19],
     ['comment on Test-Kokonut/kokonut-rules#19 that it looks good', COMMENT_19],
@@ -167,7 +168,9 @@ test('an order covers only its kind: a comment is no merge, a move is no deletio
   blocks(dir, [george('comment on Test-Kokonut/kokonut-rules#19 that it looks good')], MERGE_19);
   blocks(dir, [george('comment on Test-Kokonut/kokonut-rules#19 that it looks good')], REVIEW_19);
   blocks(dir, [george("Review pull request #19. Report any issues. Don't merge yet.")], MERGE_19);
-  passes(dir, [george("Review pull request #19. Report any issues. Don't merge yet.")], REVIEW_19, 'the review itself is ordered');
+  blocks(dir, [george("Review pull request #19. Report any issues. Don't merge yet.")], REVIEW_19, 'a short message with a no in it orders nothing: the gate asks once');
+  blocks(dir, [george('Review pull request #19 and report any issues.')], MERGE_19);
+  passes(dir, [george('Review pull request #19 and report any issues.')], REVIEW_19, 'the review itself is ordered');
   blocks(dir, [george('move the calendar event ev123 to 10:00')], mcp('mcp__Google_Calendar__delete_event', { eventId: 'ev123' }));
   passes(dir, [george('move the calendar event ev123 to 10:00')], mcp('mcp__Google_Calendar__update_event', { eventId: 'ev123' }));
   blocks(dir, [george('update the scheduled task Daily chat score to 8:00')], mcp('mcp__claude-code-remote__delete_trigger', { trigger_id: 't' }));
@@ -203,7 +206,13 @@ test('the "I will:" line in every usual form: an icon, bold around or inside, a 
     '- I will : deploy api.', 'i will: deploy api']) passes(dir, [reply(line), george('yes')], DEPLOY, line);
   passes(dir, [reply('I will:\n- deploy api\n- send the mail to anna@example.com'), george('yes')], DEPLOY, 'a list under a bare line');
   passes(dir, [reply('I will:\n- deploy api\n- send the mail to anna@example.com'), george('yes')], MAIL_ANNA);
-  passes(dir, [reply('👉 I will deploy the api and everything with it. **Yes?**'), george('yes')], DEPLOY, 'no colon: the line all the same');
+  passes(dir, [reply('👉 I will deploy the api and everything with it. **Yes?**'), george('yes')], DEPLOY, 'no colon: the line all the same when it asks');
+  blocks(dir, [reply('⚠️ The api deploy failed last night.\nI will look at the logs and report back; the deploy stays as it is.\n👉 Shall I open the ticket?'), george('yes')], DEPLOY,
+    'no colon and no question on the line: a sentence of the reply, not the line');
+  passes(dir, [reply('I will: update the doc.\nI will: delete the scheduled task Daily.'), george('yes')], mcp('mcp__claude-code-remote__delete_trigger', { trigger_id: 't' }), 'each line on its own');
+  const stopHook = { type: 'system', subtype: 'stop_hook_summary', content: 'x' };
+  const queue = { type: 'queue-operation', operation: 'dequeue' };
+  passes(dir, [reply('I will: deploy api.'), stopHook, queue, george('yes')], DEPLOY, "the app's own entries between the reply and his yes are passed over");
   blocks(dir, [reply('I will not deploy api yet.'), george('yes')], DEPLOY, 'a line that says no names nothing');
   blocks(dir, [reply('I will: deploy api, not web.'), george('yes')], DEPLOY, 'a line that says no names nothing, colon or not');
   blocks(dir, [reply('Later I will deploy api.'), george('yes')], DEPLOY, 'not at the start of a line: not the line');
@@ -237,9 +246,16 @@ test('refusals approve nothing, in every spelling, after a yes word, and over a 
   blocks(dir, [george("don't merge Test-Kokonut/kokonut-rules#19")], MERGE_19);
   blocks(dir, [george('Remove the hand-over entirely')], MERGE_19, 'no word of a merge');
   blocks(dir, [george('send me the list')], SLACK, 'no word of Slack');
-  passes(dir, [george("Don't touch the sheet. Mail Anna at anna@example.com the new time.")], MAIL_ANNA, 'the sentence that orders still does');
+  blocks(dir, [george("Don't touch the sheet. Mail Anna at anna@example.com the new time.")], MAIL_ANNA, 'a short message with a no in it orders nothing');
   blocks(dir, [george("Don't touch the sheet. Mail Anna the new time.")], mcp('mcp__Google_Sheets__update_values', { spreadsheetId: 'x' }), 'the refused one is refused');
-  passes(dir, [george('Deploy the api now. Then wait for the checks.')], DEPLOY, 'a no in another sentence');
+  for (const said of ['Never:\n\n- send the mail to anna@example.com', 'Never:\nsend the mail to anna@example.com', 'Never:\n-send the mail to anna@example.com',
+    "- Do:\n  - read the mail\n- Don't:\n  - send the mail to anna@example.com", "**Don't:**\n- send the mail to anna@example.com",
+    "Don't do any of these.\n- send the mail to anna@example.com", "Don't touch shared things, e.g. the sheet or the mail to anna@example.com.",
+    'Never:\n- mail Anna\n  at anna@example.com\n- deploy the api']) {
+    blocks(dir, [george(said)], MAIL_ANNA, said);
+    blocks(dir, [george(said)], DEPLOY, said);
+  }
+  blocks(dir, [george("Don't touch shared things, e.g. the sheet or the mail.")], mcp('mcp__Google_Sheets__update_values', { spreadsheetId: 'x' }));
 });
 
 test('quoted, pasted, fenced, blockquoted and commented text approves nothing, in every quote style', () => {
@@ -285,7 +301,10 @@ test('the saved scope is the whole order, written once for the turn', () => {
   const dir = scratch();
   const file = transcript(dir, 'o.jsonl', [george('Mail Anna at anna@example.com the new time. Then post it on Slack in C0CC8QCFVJQ.')]);
   for (const call of [MAIL_ANNA, SLACK, MAIL_ANNA, SLACK]) assert.strictEqual(refused(Object.assign({ transcript_path: file }, call), { home: dir, now: NOW }), '');
-  assert.strictEqual(fs.readFileSync(pinFile(dir), 'utf8'), STAMP + 'Mail Anna at anna@example.com the new time. Then post it on Slack in C0CC8QCFVJQ.\n');
+  assert.strictEqual(fs.readFileSync(pinFile(dir), 'utf8'), STAMP + 'Mail Anna at anna@example.com the new time Then post it on Slack in C0CC8QCFVJQ\n');
+  const file2 = transcript(dir, 'o2.jsonl', [george('Thanks for the check, all clear. Deploy the api now. Tell me when it is live.')]);
+  assert.strictEqual(refused(Object.assign({ transcript_path: file2 }, DEPLOY), { home: dir, now: NOW }), '');
+  assert.strictEqual(fs.readFileSync(pinFile(dir), 'utf8'), STAMP + 'Deploy the api now\n', 'only the sentence that orders is kept');
 });
 
 test("a helper is judged by the chat's transcript: George's order or yes there lets its blocked call pass", () => {
@@ -326,12 +345,15 @@ test('any error refuses: a call the gate cannot read, a transcript it cannot rea
 // private ids): see the pull request.
 test("a standing prompt passes the kind of step it orders in a sentence that says no 'no', and nothing else", () => {
   const dir = scratch();
-  const prompt = 'Weekly run George set on 26 Oct. He approved posting this one summary to the channel, so post it without asking.\n' +
+  const short = 'Weekly run George set on 26 Oct. He approved posting this one summary to the channel, so post it without asking.\n' +
     '1. Run exactly one search. Never list, search, open or read any other email.\n' +
     '3. Slack: read the last 20 messages of C0CC8QCFVJQ (last week\'s summary).\n' +
     '5. Post ONE message to C0CC8QCFVJQ. Super plain, brief and clear.\n' +
     '6. Change nothing else: no archiving, labels, deleting or replies; nothing in Google Cloud or any repo.';
-  passes(dir, [george(prompt)], SLACK);
+  const prompt = short + '\n7. Then, for each item, note its date and its source, and keep the wording of the source.'.repeat(12);
+  assert.ok(prompt.split(/\s+/).length > 150 && short.split(/\s+/).length <= 150);
+  blocks(dir, [george(short)], SLACK, 'a message of up to 150 words that says no anywhere orders nothing');
+  passes(dir, [george(prompt)], SLACK, 'a longer one is read sentence by sentence');
   blocks(dir, [george(prompt)], DEPLOY, 'no sentence orders a deploy');
   blocks(dir, [george(prompt)], bash('gcloud sql instances patch x'), 'the only sentence naming Google Cloud says nothing');
   blocks(dir, [george(prompt)], { tool_name: 'Artifact', tool_input: { action: 'delete', url: 'https://claude.ai/artifact/x' } }, 'the only such sentence says no');
@@ -369,7 +391,7 @@ test('the gate never allows what the word rule of 5 Nov 2026 blocked: a yes, or 
 // leaves to the chat, or a gap that exists today; none is a bug a later change silently "fixes" into a wider gate.
 test('known limits, written out: targets, repeats, untagged pastes, bracketed messages, word senses, command forms and tools it does not read', () => {
   const dir = scratch();
-  passes(dir, [george("Don't mail Bob. Mail Anna at anna@example.com the new time.")], MAIL_BOB, 'which recipient: not read; the chat keeps to what the order named');
+  passes(dir, [george('Mail Anna at anna@example.com the new time.')], MAIL_BOB, 'which recipient: not read; the chat keeps to what the order named');
   passes(dir, [george('deploy the api now')], bash('gcloud run deploy web --project other'), 'which service or project: not read');
   passes(dir, [george('check the mail from anna@example.com and tell me what she wants')], MAIL_ANNA, 'an order\'s word in another sense');
   passes(dir, [george('1. Gmail: run exactly one search.\n5. Post the summary on Slack.')], MAIL_ANNA, 'a sentence that names mail for reading passes a send');
@@ -378,6 +400,8 @@ test('known limits, written out: targets, repeats, untagged pastes, bracketed me
   passes(dir, [george('GitHub\nMerge pull request Test-Kokonut/kokonut-rules#19 from claude/x\nView it on GitHub')], MERGE_19, 'an untagged paste is read as his message (rule 13 is the chat\'s)');
   passes(dir, [george('deploy the api now'), reply('Deploying.'), george('[note] stop, do not deploy')], DEPLOY, 'a message of his that starts with [ is passed over as the cloud\'s');
   blocks(dir, [george('Merge Test-Kokonut/kokonut-rules#19 and wait for the checks.')], MERGE_19, 'a no-word in an order: the gate asks once');
+  blocks(dir, [george('Mail Anna at anna@example.com the new time, no cc')], MAIL_ANNA, 'a no anywhere in a message of up to 150 words: the gate asks once');
+  blocks(dir, [george('Deploy the api now. Then wait for the checks.')], DEPLOY, 'the same, in another sentence');
   passes(dir, [george('Cancel the mail to anna@example.com')], MAIL_ANNA, '"cancel" opening a sentence is read as an order');
   for (const command of ['git -C /home/user/x push --force origin main', 'bash -c "rm -rf /home/user/x"', 'git clean -fdx', 'gcloud --project p run deploy api']) {
     assert.strictEqual(classify('Bash', { command }), '', `a command form the gate does not read: ${command}`);
