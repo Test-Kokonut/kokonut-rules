@@ -13,15 +13,19 @@ downloads it with no login.
   chat is George's app's choice. The installer turns it into the machine-wide /root/.claude/settings.json.
 - `.claude/hooks/`: five hooks and one shared reader, each explained at the top of its file:
   - `session-start.js`: at every chat start, the reader identity for live data, then a short note: where things are.
-  - `purpose.js`: on each of George's messages, keeps the chat's Purpose and Done when in front of it. The first
-    reply holding the lines "Purpose:" and "Done when:" is pinned; once pinned, new lines pin on his yes (rule 9).
+  - `purpose.js`: on each of George's messages, shows the chat the last scope he approved, with its time, as the
+    last approved one, never as the current job. Only an approval writes it: his yes to the lines "Purpose:" and
+    "Done when:", or a shared step the gate let pass. It approves nothing (rules 9 and 12).
   - `no-main.js`: refuses every push to main or master (a pull request lands it).
   - `guard.js`: refuses Upwork API or login addresses, and a commit or push that holds a key.
   - `yes-gate.js`: refuses a call that sends, deletes, deploys or changes what others use (mail, Slack, Drive,
     Docs, Sheets, Calendar, GitHub merges, chats and scheduled tasks, Upwork, deploys, BigQuery and SQL writes, a
-    status page) unless the purpose is pinned and George's last message is a yes or names the action with its own
-    words ("deploy", "merge", "sheet", ...: a word match, no reading into his words; rules 9 and 12). Reading,
-    answering, editing files, commits, pushing the chat's branch, opening a pull request and helpers pass.
+    status page) unless George's last message approves that action and its targets: his yes to the "I will:"
+    lines of the reply he answered, or his order naming the action with its own words ("deploy", "merge",
+    "sheet", ...: a word match, no reading into his words) and each target (a recipient, a channel, a file, a repo
+    and its number, a branch, a service, a table, a page). Questions, refusals and quoted text approve nothing; the
+    saved scope is never read (rule 12). Reading, answering, editing files, commits, pushing the chat's branch,
+    opening a pull request and helpers pass.
   - `transcript.js`: what the hooks read from the chat's transcript (George's last message, the last reply, what
     counts as his yes).
 - `scripts/score.js` and `scripts/score-task.md`: the nightly score. A scheduled task starts a fresh chat once a

@@ -91,6 +91,20 @@ function lastAssistantText(file) {
   return '';
 }
 
+// George's last message and the reply he answered: the main chat's text between his previous message and his last
+// one (every text of that turn, joined); '' for each part the tail does not hold.
+function lastExchange(file) {
+  const none = { george: '', reply: '' };
+  const entries = tailEntries(file, (es) => es.filter(isGeorge).length >= 2);
+  if (!entries) return none;
+  let i = entries.length - 1;
+  while (i >= 0 && !isGeorge(entries[i])) i--;
+  if (i < 0) return none;
+  const reply = [];
+  for (let j = i - 1; j >= 0 && !isGeorge(entries[j]); j--) if (isMainAssistant(entries[j])) reply.unshift(textOf(entries[j]).trim());
+  return { george: textOf(entries[i]).trim(), reply: reply.join('\n') };
+}
+
 // The chat's own transcript for a hook input: a helper's input (agent_id) names the helper's file; the chat's file
 // sits beside it, named by session_id.
 function mainTranscript(input) {
@@ -119,4 +133,4 @@ function isYes(text) {
   return false;
 }
 
-module.exports = { tailEntries, textOf, isGeorge, lastGeorgeText, lastAssistantText, mainTranscript, isYes, INJECTED };
+module.exports = { tailEntries, textOf, isGeorge, lastGeorgeText, lastAssistantText, lastExchange, mainTranscript, isYes, INJECTED };

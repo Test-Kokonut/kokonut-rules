@@ -30,12 +30,20 @@ test('the rules the hooks enforce are written: the pin (rule 9) and the yes befo
   assert.match(text, /The gate blocks it otherwise/, 'rule 12 says the gate blocks');
 });
 
-test('rule 9 shows the two lines before a gated step, and the reminder points to rule 9 instead of copying it', () => {
-  const start = lines.findIndex((l) => l.startsWith('9. '));
-  const end = lines.findIndex((l) => l.startsWith('10. '));
-  const rule9 = lines.slice(start, end).join(' ').replace(/\s+/g, ' ');
+test('rule 9 shows the two lines only on ask or unclear scope, rule 12 limits an approval to what it names, and the reminder points to rule 9', () => {
+  const rule = (n) => {
+    const start = lines.findIndex((l) => l.startsWith(`${n}. `));
+    const end = lines.findIndex((l) => l.startsWith(`${n + 1}. `));
+    assert.ok(start >= 0 && end > start, `rule ${n} and rule ${n + 1} found`);
+    return lines.slice(start, end).join(' ').replace(/\s+/g, ' ');
+  };
+  const rule9 = rule(9);
   assert.match(rule9, /"Purpose:" and "Done when:"/, 'rule 9 names the two lines');
-  assert.match(rule9, /before the job's first gated step/, 'the gate refuses a gated step while nothing is pinned');
+  assert.match(rule9, /only when he asks or when unclear scope needs his decision/);
+  assert.doesNotMatch(rule9, /gated step/, 'no routine lines before a shared step: the gate does not need them');
+  const rule12 = rule(12);
+  assert.match(rule12, /An approval covers only the actions and targets it names/);
+  assert.match(rule12, /a saved scope approves nothing/);
   const { NOT_PINNED } = require('../.claude/hooks/purpose.js');
   assert.match(NOT_PINNED, /Rule 9 says when/, 'the reminder points to rule 9');
   assert.doesNotMatch(NOT_PINNED, /gated step|unclear scope/, 'the reminder does not restate rule 9');

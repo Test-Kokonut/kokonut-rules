@@ -4,7 +4,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { ROOT, scratch, cleanup, runHook } = require('./sandbox');
-const { classify, refused } = require('../.claude/hooks/yes-gate.js');
+const { classify, parts, refused } = require('../.claude/hooks/yes-gate.js');
 const { pinFile } = require('../.claude/hooks/purpose.js');
 
 const HOOK = path.join(ROOT, '.claude', 'hooks', 'yes-gate.js');
@@ -92,20 +92,24 @@ test('shell: reads, commits, pushing the chat\'s own branch, queries, deletes in
   }
 });
 
-test('nothing pinned and no reply with the lines: a blocked call is refused with the pin line, whatever George said', () => {
+test('a yes to no "I will:" line approves nothing: refused with the ask line, and nothing is written', () => {
   const dir = scratch();
   const file = transcript(dir, 's.jsonl', [george('yes'), reply('✅ Sure.')]);
   const r = refused(Object.assign({ transcript_path: file }, mcp('mcp__Gmail__send_message')), { home: dir });
-  assert.match(r, /^Blocked \(sending mail\): no Purpose and Done when yet\./);
+  assert.strictEqual(r, 'Blocked (sending mail): George\'s last message neither orders it nor says yes to an "I will:" line. Reply one line, "I will: <what, where>", and wait.');
   assert.ok(!fs.existsSync(pinFile(dir)));
   assert.strictEqual(refused(Object.assign({ transcript_path: file }, bash('git status')), { home: dir }), '', 'a read is never refused');
 });
 
-test('nothing pinned, the current reply holds the lines: pinned on the spot, and the call goes on', () => {
+test('his order passes with nothing pinned and no Purpose lines; it is written as the last approved scope, which approves nothing later', () => {
   const dir = scratch();
-  const file = transcript(dir, 's.jsonl', [george('mail Anna the new time'), reply('Purpose: Anna has the new time.\nDone when:\n- the mail is sent')]);
-  assert.strictEqual(refused(Object.assign({ transcript_path: file }, mcp('mcp__Gmail__send_message')), { home: dir }), '');
-  assert.strictEqual(fs.readFileSync(pinFile(dir), 'utf8'), 'Purpose: Anna has the new time.\nDone when:\n- the mail is sent\n');
+  const now = new Date('2026-11-05T15:40:00Z');
+  const file = transcript(dir, 's.jsonl', [george('mail Anna the new time')]);
+  const send = mcp('mcp__Gmail__send_message', { to: ['anna@example.com'] });
+  assert.strictEqual(refused(Object.assign({ transcript_path: file }, send), { home: dir, now }), '');
+  assert.strictEqual(fs.readFileSync(pinFile(dir), 'utf8'), 'Approved 2026-11-05 15:40 UTC\nmail Anna the new time\n');
+  const later = transcript(dir, 'later.jsonl', [george('mail Anna the new time'), reply('✅ Sent.'), george('thanks')]);
+  assert.match(refused(Object.assign({ transcript_path: later }, send), { home: dir, now }), /neither orders it nor says yes/, 'the pin approves nothing');
 });
 
 test("pinned, George's order names the action: the call passes; an order for something else: refused", () => {
@@ -130,14 +134,14 @@ test("pinned, George's order names the action: the call passes; an order for som
   }
 });
 
-test("pinned, George's last message a yes: the call passes; not a yes: refused with the ask line", () => {
+test('his yes to the "I will:" line of the reply he answered: that step passes; not a yes: refused with the ask line', () => {
   const dir = scratch();
   pin(dir);
   const yes = transcript(dir, 'yes.jsonl', [george('fix it'), reply('I will: deploy api. Yes?'), george('yes'), toolResult()]);
   assert.strictEqual(refused(Object.assign({ transcript_path: yes }, bash('gcloud run deploy api')), { home: dir }), '');
   const no = transcript(dir, 'no.jsonl', [george('yes'), reply('✅ Deployed.'), george('now delete the old branch too?')]);
   const r = refused(Object.assign({ transcript_path: no }, bash('git push origin --delete old')), { home: dir });
-  assert.strictEqual(r, 'Blocked (deleting a branch on GitHub): George\'s last message neither orders it nor says yes. Reply one line, "I will: <what, where>", and wait.');
+  assert.strictEqual(r, 'Blocked (deleting a branch on GitHub): George\'s last message neither orders it nor says yes to an "I will:" line. Reply one line, "I will: <what, where>", and wait.');
   const order = transcript(dir, 'order.jsonl', [george('Remove the hand-over entirely')]);
   assert.match(refused(Object.assign({ transcript_path: order }, mcp('mcp__github__merge_pull_request')), { home: dir }), /neither orders it nor says yes/);
 });
@@ -145,12 +149,125 @@ test("pinned, George's last message a yes: the call passes; not a yes: refused w
 test("a helper is judged by the chat's transcript: George's yes there lets its blocked call pass", () => {
   const dir = scratch();
   pin(dir);
-  transcript(dir, 'sess-1.jsonl', [george('go')]);
+  transcript(dir, 'sess-1.jsonl', [reply('I will: deploy api.'), george('go')]);
   const helper = transcript(dir, 'agent-2.jsonl', [george('Brief: deploy api and report back')]);
   const input = Object.assign({ transcript_path: helper, agent_id: 'a2', session_id: 'sess-1' }, bash('gcloud run deploy api'));
   assert.strictEqual(refused(input, { home: dir }), '');
   transcript(dir, 'sess-1.jsonl', [george('go'), reply('done'), george('what did it cost?')]);
   assert.match(refused(input, { home: dir }), /neither orders it nor says yes/);
+});
+
+// George's conditions of 5 Nov 2026: an approval covers only the actions and targets it names; a saved "last
+// approved" scope never approves; questions, refusals, quoted approvals and a yes to an unrelated question approve
+// nothing.
+const MAIL_ANNA = mcp('mcp__Gmail__send_message', { to: ['anna@example.com'], subject: 'New time', body: 'x' });
+const MAIL_BOB = mcp('mcp__Gmail__send_message', { to: ['bob@example.com'], subject: 'New time', body: 'x' });
+const MAIL_BOTH = mcp('mcp__Gmail__send_message', { to: 'anna@example.com, bob@example.com', subject: 'x', body: 'x' });
+const SLACK = mcp('mcp__Slack__slack_send_message', { channel_id: 'C0CC8QCFVJQ', message: 'hi' });
+const MERGE_19 = mcp('mcp__github__merge_pull_request', { owner: 'Test-Kokonut', repo: 'kokonut-rules', pullNumber: 19 });
+const MERGE_20 = mcp('mcp__github__merge_pull_request', { owner: 'Test-Kokonut', repo: 'kokonut-rules', pullNumber: 20 });
+const WILL_ANNA = '👉 I will: send the mail to anna@example.com.';
+
+function decide(dir, entries, call) {
+  const file = transcript(dir, `c${Math.random().toString(36).slice(2)}.jsonl`, entries);
+  return refused(Object.assign({ transcript_path: file }, call), { home: dir });
+}
+
+test('questions approve nothing: not as an order, not as a yes', () => {
+  const dir = scratch();
+  for (const said of ['send it?', 'send the mail to anna@example.com?', 'yes?', 'ok, send it?', 'should I merge kokonut-rules#19?']) {
+    const call = /merge/.test(said) ? MERGE_19 : MAIL_ANNA;
+    assert.notStrictEqual(decide(dir, [reply(WILL_ANNA), george(said)], call), '', said);
+  }
+  assert.notStrictEqual(decide(dir, [george('deploy the api now?')], bash('gcloud run deploy api')), '');
+});
+
+test('refusals approve nothing, even when they name the action and the target', () => {
+  const dir = scratch();
+  for (const said of ['no', 'not yet', "don't send it", 'no, wrong address', 'stop', 'wait', 'cancel it', 'hold on']) {
+    assert.notStrictEqual(decide(dir, [reply(WILL_ANNA), george(said)], MAIL_ANNA), '', said);
+  }
+  for (const said of ["don't send the mail to anna@example.com", 'do not send the mail to Anna', 'never mail Anna',
+    'no need to mail Anna', "don't merge kokonut-rules#19"]) {
+    const call = /merge/.test(said) ? MERGE_19 : MAIL_ANNA;
+    assert.notStrictEqual(decide(dir, [george(said)], call), '', said);
+  }
+  assert.notStrictEqual(decide(dir, [george("Don't mail Bob. Mail Anna the new time.")], MAIL_BOB), '', 'a refused target stays refused');
+  assert.strictEqual(decide(dir, [george("Don't mail Bob. Mail Anna the new time.")], MAIL_ANNA), '', 'the clause that orders still does');
+});
+
+test('quoted, pasted and fenced approvals approve nothing', () => {
+  const dir = scratch();
+  const orders = ['Anna wrote: "yes, send the mail to anna@example.com"', '> send the mail to anna@example.com',
+    '“send the mail to anna@example.com” is what she asked', 'Tell it: "merge kokonut-rules#19"',
+    '```\nsend the mail to anna@example.com\n```', '<pasted_content id="1">send the mail to anna@example.com</pasted_content>'];
+  for (const said of orders) {
+    const call = /merge/.test(said) ? MERGE_19 : MAIL_ANNA;
+    assert.notStrictEqual(decide(dir, [george(said)], call), '', said);
+  }
+  for (const said of ['"yes"', '> yes', '"ok"']) assert.notStrictEqual(decide(dir, [reply(WILL_ANNA), george(said)], MAIL_ANNA), '', said);
+  for (const quoted of ['The rule says: "I will: send the mail to anna@example.com"', '> I will: send the mail to anna@example.com',
+    '```\nI will: send the mail to anna@example.com\n```']) {
+    assert.notStrictEqual(decide(dir, [reply(quoted), george('yes')], MAIL_ANNA), '', `reply: ${quoted}`);
+  }
+});
+
+test('a yes to an unrelated question, or to another step, approves nothing', () => {
+  const dir = scratch();
+  assert.notStrictEqual(decide(dir, [reply('👉 Shall I check the lock on kokonut-cookies?'), george('yes')], MAIL_ANNA), '');
+  assert.notStrictEqual(decide(dir, [reply('👉 I will: check the lock on kokonut-cookies.'), george('yes')], MERGE_19), '');
+  assert.notStrictEqual(decide(dir, [reply(WILL_ANNA), george('yes')], SLACK), '', 'another action');
+  assert.notStrictEqual(decide(dir, [reply(WILL_ANNA), george('yes')], MAIL_BOB), '', 'another target');
+  assert.notStrictEqual(decide(dir, [reply(WILL_ANNA), george('yes')], MAIL_BOTH), '', 'a target more');
+  assert.notStrictEqual(decide(dir, [reply(WILL_ANNA), george('ok'), reply('✅ Sent.'), george('yes')], MAIL_ANNA), '', 'a yes to a later reply');
+  assert.notStrictEqual(decide(dir, [reply(WILL_ANNA), george('thanks'), george('yes')], MAIL_ANNA), '', 'the yes answers no reply');
+  assert.match(decide(dir, [reply(WILL_ANNA), george('yes')], MAIL_BOB), /does not name bob@example\.com/);
+});
+
+test('an approval covers only the actions and targets it names', () => {
+  const dir = scratch();
+  assert.strictEqual(decide(dir, [reply(WILL_ANNA), george('yes')], MAIL_ANNA), '');
+  assert.strictEqual(decide(dir, [george('send the mail to Anna')], MAIL_ANNA), '', 'an order naming the person');
+  assert.strictEqual(decide(dir, [reply('I will: merge Test-Kokonut/kokonut-rules#19.'), george('go')], MERGE_19), '');
+  assert.notStrictEqual(decide(dir, [reply('I will: merge Test-Kokonut/kokonut-rules#19.'), george('go')], MERGE_20), '');
+  assert.notStrictEqual(decide(dir, [george('merge it')], MERGE_19), '', 'an order naming no pull request');
+  assert.strictEqual(decide(dir, [george('deploy the api now')], bash('gcloud run deploy api --region x')), '');
+  assert.notStrictEqual(decide(dir, [george('deploy the api now')], bash('gcloud run deploy web --region x')), '');
+  assert.strictEqual(decide(dir, [george('clean the build folder')], bash('rm -rf build')), '');
+  assert.notStrictEqual(decide(dir, [george('clean the build folder')], bash('rm -rf build && gcloud run deploy api')), '', 'each part of a shell line');
+  assert.notStrictEqual(decide(dir, [george('clean the build folder')], bash('rm -rf build dist')), '', 'every path');
+  assert.strictEqual(decide(dir, [reply('I will: delete the old branches on GitHub, not main.'), george('yes')], bash('git push origin --delete old')), '');
+  assert.notStrictEqual(decide(dir, [reply('I will: delete the old branches on GitHub, not main.'), george('yes')], bash('git push origin --delete main')), '', 'a target in a clause that says no');
+  assert.strictEqual(decide(dir, [reply('I will: post the summary on Slack in C0CC8QCFVJQ.'), george('yes')], SLACK), '');
+  assert.strictEqual(decide(dir, [reply('I will: add 3 rows to the table upwork_site_stats (changing Google Cloud).'), george('yes')],
+    bash('gcloud sql instances execute-sql db --sql="INSERT INTO upwork_site_stats VALUES (1)"')), '');
+  assert.notStrictEqual(decide(dir, [reply('I will: add 3 rows to the table upwork_site_stats (changing Google Cloud).'), george('yes')],
+    bash('gcloud sql instances execute-sql db --sql="DELETE FROM upwork_docs"')), '');
+});
+
+test('a saved scope approves nothing: any pin gives the same decision as none', () => {
+  const cases = [
+    [[george('thanks')], MAIL_ANNA], [[reply(WILL_ANNA), george('yes')], MAIL_ANNA], [[reply(WILL_ANNA), george('yes')], MAIL_BOB],
+    [[george('send the mail to Anna')], MAIL_ANNA], [[george('what next?')], MERGE_19], [[george('deploy the api now')], bash('gcloud run deploy api')],
+  ];
+  for (const [entries, call] of cases) {
+    const bare = scratch();
+    const pinned = scratch();
+    fs.mkdirSync(path.dirname(pinFile(pinned)), { recursive: true });
+    fs.writeFileSync(pinFile(pinned), 'Approved 2026-11-05 15:40 UTC\nI will: send the mail to anna@example.com and bob@example.com, merge kokonut-rules#19.\n');
+    assert.strictEqual(decide(pinned, entries, call) === '', decide(bare, entries, call) === '', JSON.stringify(entries));
+  }
+});
+
+test('parts: every call classify blocks has its parts, and a shell line has one per blocked command', () => {
+  const calls = [bash('rm -r dist'), bash('git push -f'), bash('gh pr merge 12'), bash("psql -c 'UPDATE jobs SET x=1'"),
+    bash('node /home/user/kokonut-status/scripts/status.js save page f --base 1'), MAIL_ANNA, SLACK, MERGE_19,
+    mcp('mcp__Upwork__upwork__search_help_center'), { tool_name: 'Artifact', tool_input: { action: 'delete', url: 'https://claude.ai/artifact/abc' } },
+    bash('git status'), mcp('mcp__Gmail__get_thread')];
+  for (const c of calls) assert.strictEqual(parts(c.tool_name, c.tool_input).length > 0, classify(c.tool_name, c.tool_input) !== '', c.tool_name + ' ' + JSON.stringify(c.tool_input));
+  assert.deepStrictEqual(parts('Bash', { command: 'rm -rf build && gcloud run deploy api' }).map((p) => p.label), ['deleting files', 'deploying']);
+  assert.strictEqual(parts('Bash', { command: 'git push -f' })[0].targets, null, 'no branch named: the action alone');
+  assert.deepStrictEqual(parts('Bash', { command: "psql -c 'UPDATE jobs SET x=1'" })[0].targets[0].forms, ['jobs', 'jobs']);
 });
 
 test('as the hook: a refusal is a deny decision with the reason; a pass prints nothing; bad input prints nothing', () => {

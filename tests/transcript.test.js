@@ -4,7 +4,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { scratch, cleanup } = require('./sandbox');
-const { isYes, lastGeorgeText, lastAssistantText, mainTranscript, textOf } = require('../.claude/hooks/transcript.js');
+const { isYes, lastGeorgeText, lastAssistantText, lastExchange, mainTranscript, textOf } = require('../.claude/hooks/transcript.js');
 
 after(cleanup);
 
@@ -52,6 +52,16 @@ test("George's last message: the last typed user entry of the main chat; tool re
   ]);
   assert.strictEqual(lastGeorgeText(file), 'yes');
   assert.strictEqual(lastAssistantText(file), 'r2');
+});
+
+test("the last exchange: George's last message and every main reply text since his message before it", () => {
+  const dir = scratch();
+  const file = transcript(dir, 'x.jsonl', [george('fix it'), reply('Looking.'), toolResult(), reply('I will: deploy api.'),
+    side(reply('I will: merge everything.')), george('yes'), toolResult(), reply('Deploying.')]);
+  assert.deepStrictEqual(lastExchange(file), { george: 'yes', reply: 'Looking.\nI will: deploy api.' });
+  const first = transcript(dir, 'y.jsonl', [george('yes')]);
+  assert.deepStrictEqual(lastExchange(first), { george: 'yes', reply: '' }, 'a yes that answers no reply');
+  assert.deepStrictEqual(lastExchange(path.join(dir, 'none.jsonl')), { george: '', reply: '' });
 });
 
 test('empty or missing file: no text, no throw', () => {
