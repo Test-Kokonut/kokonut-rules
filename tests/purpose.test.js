@@ -82,6 +82,20 @@ test('review 11: a pin from before the change (no "Approved" line, often set wit
   assert.strictEqual(out, NOT_PINNED);
   check({ hook_event_name: 'UserPromptSubmit', prompt: 'ok', transcript_path: transcript(dir, [reply(PROPOSAL)]) }, { home: dir, now: NOW });
   assert.strictEqual(fs.readFileSync(pinFile(dir), 'utf8'), STAMP + PINNED, 'his ok replaces it');
+  fs.writeFileSync(pinFile(dir), PINNED);
+  const same = check({ hook_event_name: 'UserPromptSubmit', prompt: 'ok', transcript_path: transcript(dir, [reply(PROPOSAL)]) }, { home: dir, now: NOW });
+  assert.strictEqual(same, 'Pinned now:\n' + (STAMP + PINNED).trim(), 'the same lines as an old pin: his ok is recorded with its time');
+  assert.strictEqual(fs.readFileSync(pinFile(dir), 'utf8'), STAMP + PINNED);
+});
+
+test('recordApproval: a long approval is cut whole, never inside a character', () => {
+  const dir = scratch();
+  const text = 'x'.repeat(599) + '😀 and more';
+  recordApproval(text, dir, NOW);
+  const body = fs.readFileSync(pinFile(dir), 'utf8').split('\n')[1];
+  assert.ok(!body.includes('�') && body.endsWith('😀 …'), body.slice(-10));
+  recordApproval(text, dir, new Date('2026-11-05T18:00:00Z'));
+  assert.strictEqual(fs.readFileSync(pinFile(dir), 'utf8').split('\n')[0], STAMP.trim(), 'the same text keeps its first time');
 });
 
 test('recordApproval: the approval with its time; the same approval keeps its first time; a new one replaces it', () => {

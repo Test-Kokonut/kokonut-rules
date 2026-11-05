@@ -71,11 +71,13 @@ function stamp(now) {
 function recordApproval(text, home, now) {
   let body = String(text || '').trim();
   if (!body) return false;
-  if (body.length > MAX_PIN) body = body.slice(0, MAX_PIN).trimEnd() + ' …';
+  if (body.length > MAX_PIN) body = Array.from(body).slice(0, MAX_PIN).join('').trimEnd() + ' …';
   const file = pinFile(home);
   let old = '';
   try { old = fs.readFileSync(file, 'utf8'); } catch (e) { old = ''; }
-  if (old.replace(/^Approved [^\n]*\n/, '').trim() === body) return true;
+  // The same approval again keeps its first time; a pin without its "Approved" line (from before 5 Nov 2026) never
+  // counts as one.
+  if (old.startsWith('Approved ') && old.replace(/^Approved [^\n]*\n/, '').trim() === body) return true;
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, `Approved ${stamp(now)}\n${body}\n`);
   return true;
