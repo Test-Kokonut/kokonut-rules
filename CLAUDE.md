@@ -16,8 +16,9 @@
 7. A question gets an answer, not work. Work starts on his order or his yes.
 8. His yes covers the line it answers. It is never a rule. Rules live only in this file and change by a pull
    request that shows every old and new line.
-9. First reply on a job: the lines "Purpose:" and "Done when:" in his words, then the work. He corrects them if
-   wrong. The chat keeps to them. A question needs none.
+9. Keep each job's scope and its end point yourself, and report only outcomes and open problems. Show the lines
+   "Purpose:" and "Done when:" in his words only when he asks, when unclear scope needs his decision, or with the
+   "I will: …" line of a gated step, which the gate needs. Once shown, the chat keeps to them. A question needs none.
 10. A change to anything others use: list what changes, where, what depends on it, risk, undo, test. Fix the cause,
     never a patch.
 11. Check facts where they live (code, database, the running service). A guess says "guess". Mail, Drive, Slack

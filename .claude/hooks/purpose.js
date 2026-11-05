@@ -5,13 +5,13 @@
 // cloud chat by kokonut-rules' setup.sh. Inside a helper (agent_id in its input) it prints nothing.
 // The pin: ~/.claude/kokonut-purpose.md (one chat per machine in the cloud). While nothing is pinned, the chat's last
 // reply holding a line "Purpose: ..." and a line "Done when: ..." (the latter's text, or the list items under it,
-// up to 8) is pinned at George's next message, whatever it says: rule 9 states them and goes on; he corrects them
-// if wrong. Once pinned, a later reply with both lines pins again only when his message is a yes (transcript.js
+// up to 8) is pinned at George's next message, whatever it says: a reply that shows them (rule 9) goes on; he
+// corrects them if wrong. Once pinned, a later reply with both lines pins again only when his message is a yes (transcript.js
 // isYes), so the purpose changes on his ok. yes-gate.js pins the same way before a gated call in the first turn.
 // What it prints, on stdout, as context for the chat (never for George):
 //   just pinned:  "Pinned now:" and the pinned lines;
 //   pinned:       "Pinned (keep to it, never repeat it to George):" and the pinned lines;
-//   not pinned:   one line saying a change needs Purpose and Done when in his words and his ok, and a question none.
+//   not pinned:   one line saying when rule 9 shows Purpose and Done when, and that a question needs none.
 // yes-gate.js refuses a shared change while nothing is pinned.
 // Node only, no packages. Any error prints nothing; it always exits 0.
 'use strict';
@@ -21,8 +21,9 @@ const path = require('path');
 const { lastAssistantText, isYes } = require('./transcript.js');
 
 const PIN_FILE = path.join('.claude', 'kokonut-purpose.md');
-const NOT_PINNED = 'No Purpose and Done when pinned. The first reply on a job holds the lines "Purpose:" and ' +
-  '"Done when:" in George\'s words, then the work starts. A question needs none.';
+const NOT_PINNED = 'No Purpose and Done when pinned. Keep the job\'s scope yourself. Show the lines "Purpose:" and ' +
+  '"Done when:" only when George asks, when unclear scope needs his decision, or with the "I will:" line of a ' +
+  'gated step (rule 9). A question needs none.';
 // The two lines, whatever comes before the word: an icon, a bullet, bold marks ("👉 **Purpose:** ...").
 const PURPOSE = /^[^A-Za-z0-9]*Purpose\**\s*:\**\s*(.*)$/i;
 const DONE = /^[^A-Za-z0-9]*Done when\**\s*:\**\s*(.*)$/i;
