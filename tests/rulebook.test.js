@@ -44,6 +44,9 @@ test('rule 9 shows the two lines only on ask or unclear scope, rule 12 limits an
   const rule12 = rule(12);
   assert.match(rule12, /A clear order is the approval: do only what it names/);
   assert.match(rule12, /never ask twice, run it once/);
+  assert.match(rule12, /deleting \(look first, list what goes\)/, 'a deletion looks first');
+  assert.match(rule12, /A deletion: look at what is there first; what his order did not name stays/, 'what he did not name stays');
+  assert.match(rule12, /a folder and all its contents, when he names them, go/, 'a named folder goes whole');
   assert.match(rule12, /a backstop, not proof of approval/);
   const { NOT_PINNED } = require('../.claude/hooks/purpose.js');
   assert.match(NOT_PINNED, /Rule 9 says when/, 'the reminder points to rule 9');
