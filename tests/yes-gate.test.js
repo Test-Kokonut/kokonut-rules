@@ -80,6 +80,14 @@ test('shell: deleting, force pushes, merges, deploys, schedules, Google Cloud an
     "bq query --use_legacy_sql=false 'DELETE FROM ds.t WHERE 1=1'": 'changing BigQuery',
     "psql -c 'UPDATE jobs SET x=1'": 'changing the database',
     'node /home/user/kokonut-status/scripts/status.js save page f --base 1': 'changing a status page',
+    // 13 Nov 2026: reads pass, writes stay blocked.
+    'gcloud sql instances execute-sql db --sql="INSERT INTO t VALUES (1)"': 'changing Google Cloud',
+    'gcloud sql instances execute-sql db --sql=@/no/such/file.sql': 'changing Google Cloud',
+    'gcloud secrets versions access latest --secret=k': 'changing Google Cloud',
+    'bq query --destination_table=ds.t "SELECT 1"': 'changing BigQuery',
+    "bq query 'GRANT SELECT ON ds.t TO x'": 'changing BigQuery',
+    "echo 'DELETE FROM t' | psql": 'changing the database',
+    'psql <<EOF\nUPDATE t SET x = 1;\nEOF': 'changing the database',
   };
   for (const [command, label] of Object.entries(want)) assert.strictEqual(classify('Bash', { command }), label, command);
 });
@@ -88,11 +96,36 @@ test('shell: reads, commits, pushing the chat\'s own branch, queries, deletes in
   for (const command of ['git status', 'git log --oneline', 'git add -A && git commit -m x', 'git push -u origin claude/x',
     'git push origin HEAD', 'gcloud run services list', 'gcloud run services describe api', 'gcloud builds list',
     "bq query --use_legacy_sql=false 'SELECT count(*) FROM ds.t'", 'bq show ds.t', 'bq ls', "psql -c 'SELECT 1'",
+    // 13 Nov 2026: reads pass without George; a write word in a value or a comment is no statement.
+    `gcloud sql instances execute-sql db --sql="SELECT count(*) FROM t WHERE title LIKE 'Create %'"`,
+    `bq query --use_legacy_sql=false "SELECT * FROM t WHERE title = 'Create Amazon Listing Images'"`,
+    "psql -c 'SELECT 1 -- delete later'", 'gcloud sql instances describe db', 'gcloud sql databases list --instance=db',
+    'gcloud secrets list', 'gcloud projects describe p', 'gcloud iam service-accounts list',
     'rm -rf /tmp/claude-0/x/scratch', 'rm -r node_modules', 'rm -f file.txt', 'rm file.txt', 'echo "do not rm -rf anything"',
     'node /home/user/kokonut-status/scripts/status.js read page', 'node scripts/status.js list',
     'grep -rn "git push --force" docs/', 'ls', '']) {
     assert.strictEqual(classify('Bash', { command }), '', command);
   }
+});
+
+test('shell: SQL read from a file is judged by the file: a read passes, a write or a file the gate cannot open is blocked (13 Nov 2026)', () => {
+  const dir = scratch();
+  fs.writeFileSync(path.join(dir, 'read.sql'), "SELECT job_id FROM t WHERE title LIKE 'Create %' -- delete later\n");
+  fs.writeFileSync(path.join(dir, 'write.sql'), 'UPDATE t SET x = 1');
+  const read = path.join(dir, 'read.sql');
+  const write = path.join(dir, 'write.sql');
+  for (const command of [`gcloud sql instances execute-sql db --sql=@${read}`, `bq query --use_legacy_sql=false < ${read}`,
+    `D=${dir}; bq query --format=json < $D/read.sql`, `psql -f ${read}`, `mysql < ${read}`]) {
+    assert.strictEqual(classify('Bash', { command }), '', command);
+  }
+  const want = {
+    [`gcloud sql instances execute-sql db --sql=@${write}`]: 'changing Google Cloud',
+    [`bq query < ${write}`]: 'changing BigQuery',
+    [`psql -f ${write}`]: 'changing the database',
+    [`mysql < ${write}`]: 'changing the database',
+    'bq query < $NO_SUCH_FOLDER/read.sql': 'changing BigQuery',
+  };
+  for (const [command, label] of Object.entries(want)) assert.strictEqual(classify('Bash', { command }), label, command);
 });
 
 // What approves a blocked call: George's last message, by its words. The gate is a backstop, not proof of approval:

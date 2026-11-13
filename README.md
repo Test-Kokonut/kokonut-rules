@@ -21,7 +21,10 @@ downloads it with no login.
   - `guard.js`: refuses Upwork API or login addresses, and a commit or push that holds a key.
   - `yes-gate.js`: the backstop of rule 12, never a proof that a step was approved. It refuses a call that sends,
     deletes, deploys or changes what others use (mail, Slack, Drive, Docs, Sheets, Calendar, GitHub merges,
-    reviews, issues and repos, chats and scheduled tasks, Upwork, deploys, BigQuery and SQL writes, a status page)
+    reviews, issues and repos, chats and scheduled tasks, Upwork, deploys, BigQuery and SQL writes, a status page;
+    reads pass without George since 13 Nov 2026: a gcloud sql, secrets, iam or projects list or describe, never a
+    secret's value, and SQL that only reads, judged on its text and the files it reads, with string values and
+    comments taken out; a file it cannot open counts as a write)
     unless George's last message orders that kind of action with its own words ("mail", "merge", "sheet", ...: a
     word match, no reading into his words) in a sentence that does not say no, or is his yes to the reply right
     before it, holding an "I will:" line that names it. A message of up to 150 words that says no anywhere orders

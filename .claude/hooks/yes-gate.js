@@ -11,6 +11,10 @@
 // GitHub merge, review, issue, comment or repo; a chat or a scheduled task started, changed, ended or run; the
 // Upwork connector; a page deleted; in a shell: rm -r (outside the temp folder), a branch deleted, a force push,
 // gh pr merge, gcloud run deploy and the other Google Cloud writes, bq writes, SQL writes, a status page saved.
+// Reads pass without him (George, 13 Nov 2026: "I want to be protected by write but read can be done and should be
+// done without me"): a gcloud sql, secrets, iam or projects command that only lists or describes (READ_GCLOUD; never
+// `secrets versions access`, which shows a secret's value), and SQL that only reads (sqlReads), whether gcloud sql
+// instances execute-sql, bq query, psql or mysql runs it.
 // What lets a blocked call pass: George's last message in the chat's transcript (a helper is judged by the chat's
 // transcript, mainTranscript) orders that kind of action, or is his yes to an "I will:" line that names it. An
 // order names the action with the action's own words (ORDER below: "mail" for a mail, "merge" for a merge, "sheet"
@@ -43,6 +47,7 @@ if (require.main === module) {
 }
 
 const os = require('os');
+const fs = require('fs');
 const { lastExchange, mainTranscript, isYes, saysNo, plain } = require('./transcript.js');
 const { recordApproval } = require('./purpose.js');
 const { words } = require('./no-main.js');
@@ -83,7 +88,52 @@ const BASH = [
   [['node'], /\bstatus\.js\s+(?:save|new|delete)\b/, 'changing a status page'],
   [['remove-item'], /^remove-item\b/i, 'deleting files'],
 ];
-const SQL_WRITE = /\b(?:INSERT|UPDATE|DELETE|MERGE|CREATE|DROP|ALTER|TRUNCATE)\b/i;
+const SQL_WRITE = /\b(?:INSERT|UPDATE|DELETE|MERGE|CREATE|DROP|ALTER|TRUNCATE|GRANT|REVOKE|COPY|CALL|EXECUTE|EXPORT|DO|VACUUM|REINDEX|REFRESH|COMMENT|LOCK|SECURITY)\b/i;
+// Reads pass (George, 13 Nov 2026). A gcloud command of these four groups that only lists or describes; the other
+// commands of the four (secrets versions access included) stay "changing Google Cloud".
+const READ_GCLOUD = /^gcloud\s+(?:sql|secrets|iam|projects)\s+(?:[a-z][a-z-]*\s+){0,2}(?:list|describe|get-iam-policy)\b/;
+const EXECUTE_SQL = /^gcloud\s+sql\s+instances\s+execute-sql\b/;
+// bq query writes its answer into a table with these flags, whatever the SQL.
+const BQ_TABLE_FLAG = /^--(?:destination_table|append_table|replace)\b/;
+// SQL without its string literals ('...', "...", with '' and "" inside) and comments (-- to the line's end, /* ... */):
+// a word in a value ('Create Amazon Listing Images') or in a comment is no statement.
+const stripSql = (sql) => String(sql).replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/--[^\n]*/g, ' ')
+  .replace(/'(?:[^']|'')*'/g, "''").replace(/"(?:[^"]|"")*"/g, '""');
+// $NAME and ${NAME} in a word: the command's own assignments (NAME=value), else the environment; else left as is.
+function expand(word, vars) {
+  return word.replace(/\$\{?([A-Za-z_]\w*)\}?/g, (all, name) => (vars[name] !== undefined ? vars[name] : process.env[name] !== undefined ? process.env[name] : all));
+}
+// The SQL a command runs: its words; with a pipe or a heredoc in the command line, every command's words (the SQL may
+// come from an echo or from a heredoc's lines); and the files it reads (< file, -f file, --file=file, --sql=@file).
+// null when a file cannot be read: SQL the gate cannot see counts as a write.
+function sqlOf(c, command, simple) {
+  const vars = {};
+  for (const m of command.matchAll(/(?:^|[\s;&|(])([A-Za-z_]\w*)=([^\s;&|]+)/g)) vars[m[1]] = m[2].replace(/^['"]|['"]$/g, '');
+  // gcloud's own words (execute-sql) are no SQL: only the value of --sql is.
+  // Flags are no SQL either (a flag's -- would read as a comment and hide what follows): each word on its own line.
+  const inline = c.program === 'gcloud'
+    ? c.args.map((a, i) => (/^--sql=(?!@)/.test(a) ? a.slice('--sql='.length) : c.args[i - 1] === '--sql' && !/^@/.test(a) ? a : '')).filter(Boolean)
+    : c.args.filter((a) => !/^-/.test(a));
+  const parts = c.program !== 'gcloud' && /\||<</.test(command) ? simple.map((s) => s.args.filter((a) => !/^-/.test(a)).join('\n')) : [inline.join('\n')];
+  const files = [];
+  for (let i = 0; i < c.args.length; i++) {
+    const a = c.args[i];
+    if ((a === '<' || a === '-f' || a === '--file') && c.args[i + 1]) files.push(c.args[++i]);
+    else if (/^--file=/.test(a)) files.push(a.slice('--file='.length));
+    else if (/^--sql=@/.test(a)) files.push(a.slice('--sql=@'.length));
+    else if (a === '--sql' && /^@/.test(c.args[i + 1] || '')) files.push(c.args[++i].slice(1));
+    else if (/^<\S/.test(a)) files.push(a.slice(1));
+  }
+  for (const f of files) {
+    try {
+      parts.push(fs.readFileSync(expand(f, vars).replace(/^~(?=\/|$)/, os.homedir()), 'utf8').slice(0, 1000000));
+    } catch (e) {
+      return null;
+    }
+  }
+  return parts.join('\n');
+}
+const sqlReads = (sql) => sql !== null && !SQL_WRITE.test(stripSql(sql));
 // The words of George's message that name each blocked action: his order passes the gate when a sentence of his
 // holds one. A kind that is a deletion or a run needs a word for that too, in the same sentence.
 const ORDER = {
@@ -168,10 +218,18 @@ function classify(toolName, toolInput) {
     const rm = rmLabel(command);
     if (rm) return rm;
     const simple = simpleCommands(command);
-    for (const c of simple) for (const [programs, re, label] of BASH) if (programs.includes(c.program) && re.test(c.text)) return label;
-    const programs = new Set(simple.map((c) => c.program));
-    if ((programs.has('psql') || programs.has('mysql')) && SQL_WRITE.test(command)) return 'changing the database';
-    if (programs.has('bq') && simple.some((c) => c.program === 'bq' && /^bq\s+query\b/.test(c.text)) && SQL_WRITE.test(command)) return 'changing BigQuery';
+    for (const c of simple) {
+      if (c.program === 'gcloud' && EXECUTE_SQL.test(c.text)) {
+        if (!sqlReads(sqlOf(c, command, simple))) return 'changing Google Cloud';
+        continue;
+      }
+      if (c.program === 'gcloud' && READ_GCLOUD.test(c.text)) continue;
+      for (const [programs, re, label] of BASH) if (programs.includes(c.program) && re.test(c.text)) return label;
+    }
+    for (const c of simple) {
+      if ((c.program === 'psql' || c.program === 'mysql') && !sqlReads(sqlOf(c, command, simple))) return 'changing the database';
+      if (c.program === 'bq' && /^bq\s+query\b/.test(c.text) && (c.args.some((a) => BQ_TABLE_FLAG.test(a)) || !sqlReads(sqlOf(c, command, simple)))) return 'changing BigQuery';
+    }
     return '';
   }
   if (name === 'Artifact') return input.action === 'delete' ? 'deleting a page' : '';
@@ -333,4 +391,4 @@ if (require.main === module) {
   setTimeout(go, 3000);
 }
 
-module.exports = { classify, approvals, unquoted, sentences, willLines, refused, MCP, BASH, ORDER };
+module.exports = { classify, approvals, unquoted, sentences, willLines, refused, stripSql, sqlReads, MCP, BASH, ORDER };
